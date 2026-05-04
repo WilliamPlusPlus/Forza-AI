@@ -1,0 +1,15 @@
+[telemetry]
+host = "0.0.0.0"
+port = 9876
+profile = "horizon_dash"
+timeout_seconds = 2.0
+
+[drive]
+# FH5 has dynamic dirt/gravel roads that need slightly faster steering response
+max_steer_delta   = 0.12
+max_throttle_delta = 0.08
+# Quicker brake application to handle unexpected obstacles in open-world driving
+max_brake_delta   = 0.15
+deadman_seconds   = 1.0
+controller        = "xbox"
+transmission_mode = "automatic"

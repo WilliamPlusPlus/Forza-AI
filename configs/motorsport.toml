@@ -1,0 +1,13 @@
+[telemetry]
+host = "0.0.0.0"
+port = 9876
+profile = "motorsport_2023_dash"
+timeout_seconds = 2.0
+
+[drive]
+max_steer_delta = 0.10
+max_throttle_delta = 0.08
+max_brake_delta = 0.12
+deadman_seconds = 1.0
+controller = "xbox"
+transmission_mode = "automatic"
