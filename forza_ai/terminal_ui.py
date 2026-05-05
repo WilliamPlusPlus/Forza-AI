@@ -10,6 +10,7 @@ from .learning import score_metric
 from .telemetry import TelemetryFrame, is_driving_frame, normalized_control_value
 from .terrain import terrain_line
 from .transmission import transmission_status
+from .vision import VisionState
 
 
 @dataclass
@@ -24,6 +25,7 @@ class DashboardState:
     started_at: float = field(default_factory=time.time)
     last_frame: TelemetryFrame | None = None
     last_controls: Controls | None = None
+    last_vision: VisionState | None = None
     message: str = "Starting"
 
 
@@ -82,6 +84,7 @@ class TerminalDashboard:
         frames_seen: int | None = None,
         frames_saved: int | None = None,
         message: str | None = None,
+        vision: VisionState | None = None,
     ) -> None:
         if frame is not None:
             self.state.last_frame = frame
@@ -93,6 +96,8 @@ class TerminalDashboard:
             self.state.frames_saved = frames_saved
         if message is not None:
             self.state.message = message
+        if vision is not None:
+            self.state.last_vision = vision
         self.render()
 
     def render(self, force: bool = False) -> None:
@@ -117,6 +122,7 @@ class TerminalDashboard:
         print(self._driver_inputs_line())
         print(self._score_line())
         print(self._controls_line())
+        print(self._vision_line())
         print("-" * 48)
         print(self.state.message)
         print("Commands: p pause | r resume | n neutral | s status | h help | q quit")
@@ -214,6 +220,20 @@ class TerminalDashboard:
             f"steer {controls.steer:+.2f} | throttle {controls.throttle:.2f} | "
             f"brake {controls.brake:.2f} | handbrake {controls.handbrake:.2f}"
         )
+
+    def _vision_line(self) -> str:
+        v = self.state.last_vision
+        if v is None:
+            return "Vision: not started"
+        if not v.active:
+            return "Vision: inactive (install opencv-python mss pytesseract)"
+        flags = []
+        if v.is_menu:
+            flags.append("MENU")
+        if v.is_crashed:
+            flags.append("CRASHED")
+        flag_str = " | ".join(flags) if flags else "ok"
+        return f"Vision: active | lane {v.lane_offset:+.2f} | score {v.skill_score} | {flag_str}"
 
     def _status_message(self) -> str:
         frame = self.state.last_frame

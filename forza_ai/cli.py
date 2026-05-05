@@ -107,7 +107,7 @@ def record(args: argparse.Namespace) -> int:
             if not dashboard.state.paused:
                 append_frame(output_path, frame)
                 saved += 1
-            dashboard.update(frame=frame, frames_seen=seen, frames_saved=saved)
+            dashboard.update(frame=frame, frames_seen=seen, frames_saved=saved, vision=vision_state)
             if args.no_ui and saved % 300 == 0:
                 track_ordinal = frame.values.get("track_ordinal")
                 suffix = f", track_ordinal={track_ordinal}" if track_ordinal is not None else ""
@@ -235,7 +235,7 @@ def drive(args: argparse.Namespace) -> int:
                 break
             if force_neutral or dashboard.state.paused:
                 controller.neutral()
-                dashboard.update(frame=frame, controls=Controls(), frames_seen=seen)
+                dashboard.update(frame=frame, controls=Controls(), frames_seen=seen, vision=vision_state)
                 previous_learning_frame = None
                 previous_learning_controls = None
                 continue
@@ -266,12 +266,12 @@ def drive(args: argparse.Namespace) -> int:
                         f"Self-train updates {online_policy.updates}; "
                         f"reward {online_policy.last_reward.total:+.3f}"
                     )
-                dashboard.update(frame=frame, controls=controls, frames_seen=seen, message=status_message)
+                dashboard.update(frame=frame, controls=controls, frames_seen=seen, message=status_message, vision=vision_state)
                 previous_learning_frame = frame
                 previous_learning_controls = controls  # correction controls become training targets
             else:
                 controller.neutral()
-                dashboard.update(frame=frame, controls=Controls(), frames_seen=seen, message="Waiting for Horizon driving telemetry")
+                dashboard.update(frame=frame, controls=Controls(), frames_seen=seen, message="Waiting for Horizon driving telemetry", vision=vision_state)
                 previous_learning_frame = None
                 previous_learning_controls = None
             previous_frame = frame
