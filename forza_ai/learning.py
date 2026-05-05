@@ -42,6 +42,9 @@ class RewardBreakdown:
     lane_drift_penalty: float = 0.0     # leaving the lane / wandering laterally
     spin_penalty: float = 0.0           # excessive yaw / rotation
     lane_error: float = 0.0             # raw lane signal, not directly in total
+    visual_road_alignment_bonus: float = 0.0
+    visual_road_steering_penalty: float = 0.0
+    visual_road_steer_target: float = 0.0  # raw visual steering target, not directly in total
     steering_weight: float = 1.5        # highest default: steer quality is king
 
     # -----------------------------------------------------------------------
@@ -50,6 +53,8 @@ class RewardBreakdown:
     # -----------------------------------------------------------------------
     progress: float = 0.0               # distance covered this step
     speed_gain: float = 0.0             # acceleration delta
+    acceleration_bonus: float = 0.0     # throttle that actually increases speed
+    visual_progress_bonus: float = 0.0  # moving into visible road ahead
     speed_bonus: float = 0.0            # absolute speed reward
     forward_motion_bonus: float = 0.0   # forward vs lateral velocity ratio
     rpm_climb_bonus: float = 0.0        # RPM building in the power band
@@ -58,6 +63,7 @@ class RewardBreakdown:
     brake_conflict_penalty: float = 0.0 # throttle + brake simultaneously
     wasted_throttle_penalty: float = 0.0
     stall_penalty: float = 0.0
+    timidity_penalty: float = 0.0       # crawling/braking when road ahead is clear
     underrev_penalty: float = 0.0       # lugging in too high a gear
     redline_penalty: float = 0.0        # holding above redline
     speed_weight: float = 0.8
@@ -81,6 +87,7 @@ class RewardBreakdown:
     drift_bonus: float = 0.0            # controlled oversteer (drift mode)
     drift_penalty: float = 0.0          # unwanted drift (road/racing mode)
     wreckage_penalty: float = 0.0       # road mode: do not chase object-smashing skill cues
+    crash_penalty: float = 0.0          # hard impact / reset prompt penalty
     stuck_penalty: float = 0.0          # pinned against wall penalty
     achievement_weight: float = 1.0
 
@@ -93,9 +100,11 @@ class RewardBreakdown:
             self.line_following_bonus
             + self.lane_hold_bonus
             + self.road_streak_bonus
+            + self.visual_road_alignment_bonus
             - self.line_penalty
             - self.lane_drift_penalty
             - self.spin_penalty
+            - self.visual_road_steering_penalty
         )
 
     @property
@@ -103,6 +112,8 @@ class RewardBreakdown:
         return (
             self.progress
             + self.speed_gain
+            + self.acceleration_bonus
+            + self.visual_progress_bonus
             + self.speed_bonus
             + self.forward_motion_bonus
             + self.rpm_climb_bonus
@@ -111,6 +122,7 @@ class RewardBreakdown:
             - self.brake_conflict_penalty
             - self.wasted_throttle_penalty
             - self.stall_penalty
+            - self.timidity_penalty
             - self.underrev_penalty
             - self.redline_penalty
         )
@@ -132,6 +144,7 @@ class RewardBreakdown:
             + self.drift_bonus
             - self.drift_penalty
             - self.wreckage_penalty
+            - self.crash_penalty
             - self.stuck_penalty
         )
 
@@ -564,6 +577,138 @@ def _fv(value: object) -> float:
         return 0.0
 
 
+def crash_penalty(
+    previous: TelemetryFrame,
+    current: TelemetryFrame,
+    reward_profile: RewardProfile | None = None,
+) -> float:
+    """Penalty for impact-like transitions and on-screen reset prompts."""
+    profile = _profile(reward_profile)
+    previous_speed = _fv(previous.values.get("speed"))
+    speed = _fv(current.values.get("speed"))
+    visual_reset = (
+        _fv(current.values.get("vision_reset_prompt")) > 0.0
+        or _fv(current.values.get("vision_penalty_prompt")) > 0.0
+    )
+    if previous_speed < profile.number("crash.min_previous_speed", 8.0):
+        return profile.number("crash.reset_prompt_penalty", 2.5) if visual_reset else 0.0
+
+    speed_drop = max(0.0, previous_speed - speed)
+    ax = _fv(current.values.get("acceleration_x"))
+    ay = _fv(current.values.get("acceleration_y"))
+    az = _fv(current.values.get("acceleration_z"))
+    impact = math.sqrt(ax * ax + ay * ay + az * az)
+    drop_threshold = profile.number("crash.speed_drop_threshold", 4.0)
+    impact_threshold = profile.number("crash.impact_accel_threshold", 26.0)
+    if not visual_reset and speed_drop < drop_threshold and impact < impact_threshold:
+        return 0.0
+
+    penalty = profile.number("crash.base_penalty", 2.0)
+    penalty += max(0.0, speed_drop - drop_threshold) * profile.number("crash.speed_drop_multiplier", 0.20)
+    penalty += max(0.0, impact - impact_threshold) * profile.number("crash.impact_multiplier", 0.05)
+    if visual_reset:
+        penalty += profile.number("crash.reset_prompt_penalty", 2.5)
+    return min(profile.number("crash.penalty_cap", 4.0), penalty)
+
+
+def visual_road_steering_reward(
+    current: TelemetryFrame,
+    action: Controls,
+    reward_profile: RewardProfile | None = None,
+) -> tuple[float, float, float]:
+    """Return visual-road steering target, alignment bonus, and mismatch penalty."""
+    profile = _profile(reward_profile)
+    values = current.values
+    confidence = _fv(values.get("vision_road_direction_confidence"))
+    if confidence < profile.number("visual_steering.min_confidence", 0.18):
+        return 0.0, 0.0, 0.0
+    offset = max(-1.0, min(1.0, _fv(values.get("vision_road_center_offset"))))
+    heading = max(-1.0, min(1.0, _fv(values.get("vision_road_heading"))))
+    steer_target = max(
+        -profile.number("visual_steering.target_cap", 0.65),
+        min(
+            profile.number("visual_steering.target_cap", 0.65),
+            offset * profile.number("visual_steering.offset_multiplier", 0.35)
+            + heading * profile.number("visual_steering.heading_multiplier", 0.45),
+        ),
+    )
+    if abs(steer_target) < profile.number("visual_steering.min_target", 0.03):
+        return steer_target, 0.0, 0.0
+    error = abs(action.steer - steer_target)
+    tolerance = profile.number("visual_steering.error_tolerance", 0.22)
+    penalty = max(0.0, error - tolerance) * confidence * profile.number("visual_steering.penalty_multiplier", 0.35)
+    bonus = max(0.0, tolerance - error) * confidence * profile.number("visual_steering.bonus_multiplier", 0.12)
+    return steer_target, bonus, min(profile.number("visual_steering.penalty_cap", 0.45), penalty)
+
+
+def visual_forward_progress_reward(
+    current: TelemetryFrame,
+    action: Controls,
+    *,
+    distance_delta: float,
+    speed_delta: float,
+    reward_profile: RewardProfile | None = None,
+) -> tuple[float, float]:
+    """Reward assertive progress into visually clear road and penalize timid crawling."""
+    profile = _profile(reward_profile)
+    values = current.values
+    road_confidence, offroad_confidence = _visual_road_clearance(values)
+    if road_confidence < profile.number("movement.visual_progress_min_confidence", 0.22):
+        return 0.0, 0.0
+    margin = profile.number("movement.visual_progress_road_margin", 0.12)
+    if offroad_confidence > road_confidence + margin:
+        return 0.0, 0.0
+    if _fv(values.get("vision_reset_prompt")) > 0.0 or _fv(values.get("vision_penalty_prompt")) > 0.0:
+        return 0.0, 0.0
+
+    confidence = min(1.0, max(0.0, road_confidence - offroad_confidence * 0.35))
+    progress_bonus = min(
+        profile.number("movement.visual_progress_bonus_cap", 0.50),
+        confidence
+        * (
+            max(0.0, distance_delta) * profile.number("movement.visual_progress_distance_multiplier", 0.025)
+            + max(0.0, speed_delta) * profile.number("movement.visual_progress_speed_delta_multiplier", 0.045)
+            + action.throttle * profile.number("movement.visual_progress_throttle_multiplier", 0.12)
+        ),
+    )
+
+    speed = _fv(values.get("speed"))
+    ai_brake = max(0.0, _fv(values.get("normalized_ai_brake_difference")) / 127.0)
+    if (
+        speed >= profile.number("movement.timidity_min_speed", 1.0)
+        and speed <= profile.number("movement.timidity_speed_threshold", 32.0)
+        and ai_brake <= profile.number("movement.timidity_ai_brake_threshold", 0.35)
+    ):
+        throttle_gap = max(0.0, profile.number("movement.timidity_min_throttle", 0.45) - action.throttle)
+        brake_excess = max(0.0, action.brake - profile.number("movement.timidity_brake_threshold", 0.08))
+        timidity = min(
+            profile.number("movement.timidity_penalty_cap", 0.45),
+            confidence
+            * (throttle_gap + brake_excess)
+            * profile.number("movement.timidity_penalty_multiplier", 0.65),
+        )
+    else:
+        timidity = 0.0
+    return progress_bonus, timidity
+
+
+def _visual_road_clearance(values: dict[str, Any]) -> tuple[float, float]:
+    road_confidence = max(
+        _fv(values.get("vision_road_direction_confidence")),
+        _fv(values.get("vision_road_score")),
+        _fv(values.get("vision_road_roi_road_score")),
+        0.75 if _fv(values.get("vision_surface_is_road")) > 0.0 else 0.0,
+        0.75 if _fv(values.get("vision_road_roi_is_road")) > 0.0 else 0.0,
+    )
+    offroad_confidence = max(
+        _fv(values.get("vision_offroad_score")),
+        _fv(values.get("vision_road_roi_offroad_score")),
+        0.75 if _fv(values.get("vision_surface_is_offroad")) > 0.0 else 0.0,
+        0.75 if _fv(values.get("vision_road_roi_is_offroad")) > 0.0 else 0.0,
+    )
+    return min(1.0, road_confidence), min(1.0, offroad_confidence)
+
+
 def _vision_lane_confidence(values: dict[str, Any]) -> float:
     return min(
         1.0,
@@ -735,15 +880,28 @@ def score_transition(
         profile.number("movement.speed_bonus_cap", 0.15),
         max(0.0, speed) * profile.number("movement.speed_bonus_multiplier", 0.0024),
     )
+    acceleration_bonus = (
+        0.0
+        if action.throttle < profile.number("movement.acceleration_min_throttle", 0.20)
+        else min(
+            profile.number("movement.acceleration_bonus_cap", 0.45),
+            max(0.0, speed_delta)
+            * action.throttle
+            * profile.number("movement.acceleration_multiplier", 0.055),
+        )
+    )
     brake_conflict = min(action.throttle, action.brake) + action.throttle * ai_brake
     wasted_throttle = (
         action.throttle > profile.number("stability.wasted_throttle_min_throttle", 0.35)
+        and speed > profile.number("stability.wasted_throttle_min_speed", 3.0)
         and speed_delta < profile.number("stability.wasted_throttle_speed_delta", 0.15)
         and distance_delta < profile.number("stability.wasted_throttle_distance_delta", 0.20)
     )
     stalled = (
         action.throttle > profile.number("stability.stall_min_throttle", 0.35)
         and speed < profile.number("stability.stall_speed_threshold", 1.0)
+        and prev_speed < profile.number("stability.stall_previous_speed_threshold", 1.0)
+        and distance_delta < profile.number("stability.stall_distance_delta", 0.05)
     )
     prev_score = score_metric(previous)
     score = score_metric(current)
@@ -775,6 +933,18 @@ def score_transition(
     )
     if wasted_throttle or stalled:
         lane_bonus = 0.0
+    visual_steer_target, visual_steer_bonus, visual_steer_penalty = visual_road_steering_reward(
+        current,
+        action,
+        profile,
+    )
+    visual_progress_bonus, timidity_penalty = visual_forward_progress_reward(
+        current,
+        action,
+        distance_delta=distance_delta,
+        speed_delta=speed_delta,
+        reward_profile=profile,
+    )
 
     # Mode-specific drift logic
     # Drift mode: reward controlled oversteer, skip slip/slide/spin penalties
@@ -813,6 +983,8 @@ def score_transition(
         score_gain=score_gain,
         progress=distance_delta * profile.number("movement.progress_multiplier", 0.35),
         speed_gain=speed_delta * profile.number("movement.speed_gain_multiplier", 0.03),
+        acceleration_bonus=acceleration_bonus,
+        visual_progress_bonus=visual_progress_bonus,
         speed_bonus=speed_bonus,
         shift_bonus=clean_shift_bonus(previous, current, profile),
         downshift_bonus=clean_downshift_bonus(previous, current, profile),
@@ -821,6 +993,9 @@ def score_transition(
         terrain_bonus=terrain_bonus,
         line_following_bonus=line_following_bonus(line, line_thresh, speed, profile),
         lane_hold_bonus=lane_bonus,
+        visual_road_alignment_bonus=visual_steer_bonus,
+        visual_road_steering_penalty=visual_steer_penalty,
+        visual_road_steer_target=visual_steer_target,
         drift_bonus=active_drift_bonus,
         line_penalty=max(0.0, line - line_thresh) * line_mult,
         lane_drift_penalty=lane_penalty,
@@ -830,12 +1005,14 @@ def score_transition(
         spin_penalty=active_spin_penalty,
         drift_penalty=active_drift_penalty,
         wreckage_penalty=wreckage_penalty,
+        crash_penalty=crash_penalty(previous, current, profile),
         terrain_penalty=terrain_penalty,
         terrain_offroad_score=terrain.offroad_score,
         redline_penalty=redline_penalty(current, action, profile),
         brake_conflict_penalty=brake_conflict * profile.number("stability.brake_conflict_multiplier", 0.55),
         wasted_throttle_penalty=profile.number("stability.wasted_throttle_penalty", 0.40) if wasted_throttle else 0.0,
         stall_penalty=profile.number("stability.stall_penalty", 0.35) if stalled else 0.0,
+        timidity_penalty=timidity_penalty,
         underrev_penalty=underrev_penalty(current, action, profile),
     )
 
@@ -863,15 +1040,17 @@ def reward_adjusted_target(
         + reward.stall_penalty
         + reward.underrev_penalty
         + reward.drift_penalty
+        + reward.crash_penalty
     )
     if (
         reward.total >= 0
         and risk_penalty <= 0.0
         and offroad <= profile.number("target_adjustment.offroad_score_threshold", 0.15)
+        and reward.timidity_penalty <= 0.0
     ):
         return target
 
-    if offroad > profile.number("target_adjustment.offroad_score_threshold", 0.15):
+    if offroad > profile.number("target_adjustment.offroad_score_threshold", 0.15) and reward.crash_penalty <= 0.0:
         correction_strength = min(
             profile.number("target_adjustment.offroad_correction_cap", 0.55),
             offroad * profile.number("target_adjustment.offroad_correction_multiplier", 1.20),
@@ -885,10 +1064,43 @@ def reward_adjusted_target(
         ).clipped()
 
     # On-road bad behaviour: cut throttle, optionally add brake.
+    target_steer = target.steer
+    target_throttle = target.throttle
+    target_brake = target.brake
+    if reward.timidity_penalty > 0.0:
+        target_throttle = max(
+            target_throttle,
+            min(
+                profile.number("target_adjustment.timidity_throttle_cap", 0.72),
+                profile.number("target_adjustment.timidity_min_throttle", 0.52)
+                + reward.timidity_penalty * profile.number("target_adjustment.timidity_throttle_multiplier", 0.90),
+            ),
+        )
+        target_brake = min(
+            target_brake,
+            profile.number("target_adjustment.timidity_brake_cap", 0.03),
+        )
+    if reward.visual_road_steering_penalty > 0.0:
+        visual_blend = min(
+            profile.number("target_adjustment.visual_road_steer_blend_cap", 0.45),
+            reward.visual_road_steering_penalty
+            * profile.number("target_adjustment.visual_road_steer_blend_multiplier", 1.25),
+        )
+        target_steer = (
+            target.steer * (1.0 - visual_blend)
+            + reward.visual_road_steer_target * visual_blend
+        )
+    throttle_cap = (
+        profile.number("target_adjustment.crash_throttle_cut_cap", 0.95)
+        if reward.crash_penalty > 0.0
+        else (
+            profile.number("target_adjustment.redline_throttle_cut_cap", 0.75)
+            if reward.redline_penalty > 0.0
+            else profile.number("target_adjustment.general_throttle_cut_cap", 0.45)
+        )
+    )
     throttle_cut = min(
-        profile.number("target_adjustment.redline_throttle_cut_cap", 0.75)
-        if reward.redline_penalty > 0.0
-        else profile.number("target_adjustment.general_throttle_cut_cap", 0.45),
+        throttle_cap,
         reward.slip_penalty
         + reward.lateral_slide_penalty
         + reward.lane_drift_penalty * profile.number("target_adjustment.lane_throttle_cut_multiplier", 0.25)
@@ -896,12 +1108,19 @@ def reward_adjusted_target(
         + reward.brake_conflict_penalty
         + reward.wasted_throttle_penalty
         + reward.stall_penalty
-        + reward.redline_penalty,
+        + reward.redline_penalty
+        + reward.crash_penalty * profile.number("target_adjustment.crash_throttle_cut_multiplier", 0.35),
+    )
+    brake_cap = (
+        profile.number("target_adjustment.crash_brake_add_cap", 0.65)
+        if reward.crash_penalty > 0.0
+        else profile.number("target_adjustment.brake_add_cap", 0.25)
     )
     brake_add = min(
-        profile.number("target_adjustment.brake_add_cap", 0.25),
+        brake_cap,
         reward.slip_penalty * profile.number("target_adjustment.brake_slip_multiplier", 0.35)
-        + reward.brake_conflict_penalty * profile.number("target_adjustment.brake_conflict_multiplier", 0.20),
+        + reward.brake_conflict_penalty * profile.number("target_adjustment.brake_conflict_multiplier", 0.20)
+        + reward.crash_penalty * profile.number("target_adjustment.crash_brake_multiplier", 0.40),
     )
     steer_trim = min(
         profile.number("target_adjustment.steer_trim_cap", 0.30),
@@ -909,9 +1128,9 @@ def reward_adjusted_target(
         + reward.lane_drift_penalty * profile.number("target_adjustment.steer_lane_multiplier", 0.60),
     )
     return Controls(
-        steer=target.steer * (1.0 - steer_trim),
-        throttle=target.throttle * (1.0 - throttle_cut),
-        brake=max(target.brake, brake_add),
+        steer=target_steer * (1.0 - steer_trim),
+        throttle=target_throttle * (1.0 - throttle_cut),
+        brake=max(target_brake, brake_add),
         handbrake=target.handbrake,
     ).clipped()
 
@@ -1052,6 +1271,12 @@ class OnlineDrivingPolicy(DrivingPolicy):
     exploration_std: float = 0.18
     exploration_decay: float = 0.9999
     min_exploration_std: float = 0.04
+    # Low-amplitude continuous entropy so the learner still samples nearby
+    # steering/throttle choices even between directed exploration bursts.
+    entropy_std: float = 0.07
+    entropy_decay: float = 0.99995
+    entropy_min: float = 0.03
+    exploration_enabled: bool = True
     # Curiosity: intrinsic bonus for visiting novel (speed, yaw, slip) states
     curiosity_weight: float = 0.30
     # Per-path reward multipliers — tune these to shift the model's priorities
@@ -1087,8 +1312,26 @@ class OnlineDrivingPolicy(DrivingPolicy):
         self.max_reward_weight = self.reward_profile.number(
             "sample_weights.max_reward_weight", self.max_reward_weight
         )
+        if self.exploration_enabled:
+            self.epsilon = self.reward_profile.number("online.epsilon", self.epsilon)
+            self.epsilon_min = self.reward_profile.number("online.epsilon_min", self.epsilon_min)
+            self.exploration_std = self.reward_profile.number("online.exploration_std", self.exploration_std)
+            self.min_exploration_std = self.reward_profile.number(
+                "online.min_exploration_std",
+                self.min_exploration_std,
+            )
+            self.entropy_std = self.reward_profile.number("online.entropy_std", self.entropy_std)
+            self.entropy_min = self.reward_profile.number("online.entropy_min", self.entropy_min)
+        else:
+            self.epsilon = 0.0
+            self.epsilon_min = 0.0
+            self.exploration_std = 0.0
+            self.min_exploration_std = 0.0
+            self.entropy_std = 0.0
+            self.entropy_min = 0.0
         self.epsilon_decay = self.reward_profile.number("online.epsilon_decay", self.epsilon_decay)
         self.exploration_decay = self.reward_profile.number("online.exploration_decay", self.exploration_decay)
+        self.entropy_decay = self.reward_profile.number("online.entropy_decay", self.entropy_decay)
         self.curiosity_weight = self.reward_profile.number("online.curiosity_weight", self.curiosity_weight)
         self.model_path = Path(self.model_path)
         n = len(self.features)
@@ -1100,6 +1343,7 @@ class OnlineDrivingPolicy(DrivingPolicy):
         )
         if self.model_path.exists():
             self._load()
+        self._restore_exploration_floor()
 
     # ------------------------------------------------------------------
     # Inference
@@ -1161,15 +1405,25 @@ class OnlineDrivingPolicy(DrivingPolicy):
             s, t, b, hb = self._explore_action
             return Controls(steer=s, throttle=t, brake=b, handbrake=hb).clipped()
 
-        # --- Directed steer nudge between exploration episodes ---
-        std = max(self.min_exploration_std, self.exploration_std)
-        if std > self.min_exploration_std:
-            edge_sign = 1.0 if (self.updates // 8) % 2 == 0 else -1.0
-            steer_nudge = edge_sign * std * 0.60
-            throttle_nudge = float(np.random.normal(0.0, std * 0.25))
+        # --- Local entropy between exploration episodes ---
+        entropy = self._current_entropy_std()
+        probability = self.reward_profile.number("online.entropy_probability", 0.85)
+        if entropy > 0.0 and random.random() < probability:
+            edge_sign = 1.0 if (self.updates // 12) % 2 == 0 else -1.0
+            directional = edge_sign * entropy * self.reward_profile.number(
+                "online.entropy_directional_steer_multiplier",
+                0.35,
+            )
+            steer_noise = directional + float(np.random.normal(0.0, entropy))
+            throttle_noise = float(np.random.normal(0.0, entropy * self.reward_profile.number(
+                "online.entropy_throttle_multiplier",
+                0.55,
+            )))
+            if float(frame.values.get("speed", 0.0) or 0.0) < self.reward_profile.number("online.entropy_low_speed", 6.0):
+                throttle_noise += entropy * self.reward_profile.number("online.entropy_low_speed_throttle_bias", 0.70)
             return Controls(
-                steer=blended.steer + steer_nudge,
-                throttle=blended.throttle + throttle_nudge,
+                steer=blended.steer + steer_noise,
+                throttle=blended.throttle + throttle_noise,
                 brake=blended.brake,
                 handbrake=blended.handbrake,
             ).clipped()
@@ -1215,6 +1469,7 @@ class OnlineDrivingPolicy(DrivingPolicy):
         self.last_reward = reward
         self.exploration_std = max(self.min_exploration_std, self.exploration_std * self.exploration_decay)
         self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
+        self.entropy_std = max(self.entropy_min, self.entropy_std * self.entropy_decay)
         if self.autosave_frames > 0 and self.updates % self.autosave_frames == 0:
             self.save()
         return reward
@@ -1252,6 +1507,7 @@ class OnlineDrivingPolicy(DrivingPolicy):
                 "fitted": self.fitted,
                 "updates": self.updates,
                 "exploration_std": self.exploration_std,
+                "entropy_std": self.entropy_std,
                 "epsilon": self.epsilon,
                 "visit_counts": self._visit_counts,
             },
@@ -1274,6 +1530,7 @@ class OnlineDrivingPolicy(DrivingPolicy):
             self.fitted       = bool(bundle.get("fitted", False))
             self.updates      = int(bundle.get("updates", 0) or 0)
             self.exploration_std = float(bundle.get("exploration_std", self.exploration_std))
+            self.entropy_std = float(bundle.get("entropy_std", self.entropy_std))
             self.epsilon      = float(bundle.get("epsilon", self.epsilon))
             self._visit_counts = bundle.get("visit_counts", {})
         except Exception:
@@ -1296,6 +1553,36 @@ class OnlineDrivingPolicy(DrivingPolicy):
             self.max_reward_weight * profile.number("sample_weights.max_weight_multiplier", 1.20),
             base + curiosity_boost,
         )
+
+    def _restore_exploration_floor(self) -> None:
+        if not self.exploration_enabled:
+            return
+        profile = _profile(self.reward_profile)
+        self.epsilon = max(
+            self.epsilon,
+            self.epsilon_min,
+            profile.number("online.startup_epsilon_floor", 0.10),
+        )
+        self.exploration_std = max(
+            self.exploration_std,
+            self.min_exploration_std,
+            profile.number("online.startup_exploration_std_floor", 0.12),
+        )
+        self.entropy_std = max(
+            self.entropy_std,
+            self.entropy_min,
+            profile.number("online.startup_entropy_std_floor", 0.06),
+        )
+
+    def _current_entropy_std(self) -> float:
+        if not self.exploration_enabled:
+            return 0.0
+        profile = _profile(self.reward_profile)
+        base = max(self.entropy_min, self.entropy_std)
+        warmup_updates = profile.integer("online.entropy_warmup_updates", 720)
+        if self.updates < warmup_updates:
+            base *= profile.number("online.entropy_warmup_multiplier", 1.45)
+        return min(profile.number("online.entropy_cap", 0.16), max(0.0, base))
 
     def _update_stuck(self, frame: TelemetryFrame, action: Controls) -> float:
         """

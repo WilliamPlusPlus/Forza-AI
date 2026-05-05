@@ -17,6 +17,7 @@ forza_ai/trainer.py
 forza_ai/transmission.py
 forza_ai/user_input.py
 forza_ai/vision.py
+forza_ai/vision_training.py
 forza_ai.egg-info/PKG-INFO
 forza_ai.egg-info/SOURCES.txt
 forza_ai.egg-info/dependency_links.txt
@@ -33,3 +34,4 @@ tests/test_terminal_ui.py
 tests/test_terrain.py
 tests/test_transmission.py
 tests/test_user_input.py
+tests/test_vision_training.py

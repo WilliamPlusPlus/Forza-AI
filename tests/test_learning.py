@@ -4,10 +4,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import numpy as np
+
 from forza_ai.controller import Controls
 from forza_ai.learning import (
     OnlineDrivingPolicy,
     _TORCH_AVAILABLE,
+    crash_penalty,
     movement_delta,
     reward_adjusted_target,
     score_metric,
@@ -50,6 +53,10 @@ def _frame(**values):
         "wheel_puddle_depth_fr": 0.0,
         "wheel_puddle_depth_rl": 0.0,
         "wheel_puddle_depth_rr": 0.0,
+        "suspension_travel_meters_fl": 0.03,
+        "suspension_travel_meters_fr": 0.03,
+        "suspension_travel_meters_rl": 0.03,
+        "suspension_travel_meters_rr": 0.03,
     }
     defaults.update(values)
     return TelemetryFrame(received_at=0.0, profile="horizon_dash", values=defaults)
@@ -69,6 +76,61 @@ class LearningTests(unittest.TestCase):
         )
 
         self.assertGreater(reward.total, 0.0)
+
+    def test_throttle_that_accelerates_gets_extra_reward(self):
+        accelerating = score_transition(
+            _frame(speed=10.0, distance_traveled=20.0),
+            _frame(speed=14.0, distance_traveled=23.0),
+            Controls(throttle=0.9),
+        )
+        coasting = score_transition(
+            _frame(speed=10.0, distance_traveled=20.0),
+            _frame(speed=14.0, distance_traveled=23.0),
+            Controls(throttle=0.0),
+        )
+
+        self.assertGreater(accelerating.acceleration_bonus, 0.0)
+        self.assertEqual(coasting.acceleration_bonus, 0.0)
+        self.assertGreater(accelerating.speed_score, coasting.speed_score)
+        self.assertGreater(accelerating.acceleration_bonus, 0.20)
+
+    def test_visible_road_rewards_forward_progress(self):
+        reward = score_transition(
+            _frame(speed=10.0, distance_traveled=20.0),
+            _frame(
+                speed=13.0,
+                distance_traveled=24.0,
+                vision_road_score=0.72,
+                vision_road_direction_confidence=0.72,
+                vision_offroad_score=0.05,
+            ),
+            Controls(throttle=0.7),
+            terrain_preference="road",
+            driving_mode="road",
+        )
+
+        self.assertGreater(reward.visual_progress_bonus, 0.0)
+        self.assertEqual(reward.timidity_penalty, 0.0)
+
+    def test_visible_road_penalizes_timidity_and_boosts_target(self):
+        reward = score_transition(
+            _frame(speed=8.0, distance_traveled=20.0),
+            _frame(
+                speed=8.2,
+                distance_traveled=20.2,
+                vision_road_score=0.78,
+                vision_road_direction_confidence=0.78,
+                vision_offroad_score=0.04,
+            ),
+            Controls(throttle=0.1, brake=0.2),
+            terrain_preference="road",
+            driving_mode="road",
+        )
+        target = reward_adjusted_target(Controls(throttle=0.1, brake=0.2), reward)
+
+        self.assertGreater(reward.timidity_penalty, 0.0)
+        self.assertGreater(target.throttle, 0.65)
+        self.assertLess(target.brake, 0.2)
 
     def test_progress_falls_back_to_world_position_movement(self):
         previous = _frame(distance_traveled=0.0, position_x=10.0, position_y=0.0, position_z=10.0)
@@ -140,6 +202,44 @@ class LearningTests(unittest.TestCase):
         self.assertLess(reward.redline_penalty, 4.0)
         self.assertLess(target.throttle, 0.45)
 
+    def test_crash_penalty_cuts_throttle_and_adds_brake(self):
+        reward = score_transition(
+            _frame(speed=30.0, distance_traveled=20.0),
+            _frame(speed=2.0, distance_traveled=20.1, acceleration_x=-35.0),
+            Controls(throttle=0.8),
+        )
+        target = reward_adjusted_target(Controls(throttle=0.8), reward)
+
+        self.assertGreater(reward.crash_penalty, 0.0)
+        self.assertLess(reward.total, 0.0)
+        self.assertLess(target.throttle, 0.2)
+        self.assertGreater(target.brake, 0.2)
+
+    def test_reset_prompt_counts_as_crash_signal(self):
+        penalty = crash_penalty(
+            _frame(speed=12.0),
+            _frame(speed=12.0, vision_reset_prompt=1),
+        )
+
+        self.assertGreater(penalty, 0.0)
+
+    def test_visual_road_direction_trims_bad_steering_target(self):
+        reward = score_transition(
+            _frame(speed=18.0),
+            _frame(
+                speed=18.0,
+                vision_road_center_offset=0.7,
+                vision_road_heading=0.4,
+                vision_road_direction_confidence=0.8,
+            ),
+            Controls(steer=-0.5, throttle=0.5),
+        )
+        target = reward_adjusted_target(Controls(steer=-0.5, throttle=0.5), reward)
+
+        self.assertGreater(reward.visual_road_steering_penalty, 0.0)
+        self.assertGreater(reward.visual_road_steer_target, 0.0)
+        self.assertGreater(target.steer, -0.5)
+
     def test_redline_penalty_uses_learned_redline_when_confident(self):
         reward = score_transition(
             _frame(speed=30.0, gear=2, engine_max_rpm=9000.0, learned_redline_rpm=7200.0, learned_redline_confidence=0.8, current_engine_rpm=7000.0),
@@ -161,6 +261,16 @@ class LearningTests(unittest.TestCase):
         self.assertLess(reward.total, 0.0)
         self.assertLess(target.throttle, 0.75)
 
+    def test_launch_throttle_is_not_penalized_as_wasted(self):
+        reward = score_transition(
+            _frame(speed=0.4, distance_traveled=0.0, position_x=1.0, position_y=0.0, position_z=1.0),
+            _frame(speed=1.4, distance_traveled=0.0, position_x=1.03, position_y=0.0, position_z=1.02),
+            Controls(throttle=0.75),
+        )
+
+        self.assertEqual(reward.wasted_throttle_penalty, 0.0)
+        self.assertEqual(reward.stall_penalty, 0.0)
+
     def test_road_preference_rewards_road_and_penalizes_offroad(self):
         road_reward = score_transition(
             _frame(speed=10.0, position_x=0.0),
@@ -173,10 +283,10 @@ class LearningTests(unittest.TestCase):
             _frame(
                 speed=11.0,
                 position_x=2.0,
-                wheel_on_rumble_fl=1,
-                wheel_on_rumble_fr=1,
-                wheel_on_rumble_rl=1,
-                wheel_on_rumble_rr=1,
+                suspension_travel_meters_fl=0.24,
+                suspension_travel_meters_fr=0.24,
+                suspension_travel_meters_rl=0.22,
+                suspension_travel_meters_rr=0.22,
             ),
             Controls(throttle=0.5),
             terrain_preference="road",
@@ -185,51 +295,50 @@ class LearningTests(unittest.TestCase):
         self.assertGreater(road_reward.terrain_bonus, 0.0)
         self.assertGreater(offroad_reward.terrain_penalty, 0.0)
 
-    def test_road_preference_heavily_punishes_offroad(self):
+    def test_road_preference_punishes_offroad_without_exploding_scale(self):
         reward = score_transition(
             _frame(speed=10.0, position_x=0.0),
             _frame(
                 speed=11.0,
                 position_x=2.0,
-                wheel_on_rumble_fl=1,
-                wheel_on_rumble_fr=1,
-                wheel_on_rumble_rl=1,
-                wheel_on_rumble_rr=1,
-                wheel_puddle_depth_fl=0.3,
-                wheel_puddle_depth_fr=0.3,
-                wheel_puddle_depth_rl=0.3,
-                wheel_puddle_depth_rr=0.3,
+                suspension_travel_meters_fl=0.24,
+                suspension_travel_meters_fr=0.24,
+                suspension_travel_meters_rl=0.22,
+                suspension_travel_meters_rr=0.22,
             ),
             Controls(throttle=0.5),
             terrain_preference="road",
         )
 
-        self.assertGreaterEqual(reward.terrain_penalty, 8.0)
+        self.assertGreaterEqual(reward.terrain_penalty, 2.0)
+        self.assertLessEqual(reward.terrain_penalty, 6.0)
         self.assertLess(reward.total, 0.0)
 
-    def test_road_preference_offroad_penalty_beats_strong_acceleration(self):
+    def test_road_preference_offroad_penalty_is_balanced_against_strong_acceleration(self):
         reward = score_transition(
             _frame(speed=10.0, position_x=0.0, velocity_z=8.0),
             _frame(
                 speed=20.0,
                 position_x=8.0,
                 velocity_z=18.0,
-                wheel_on_rumble_fl=1,
-                wheel_on_rumble_fr=1,
-                wheel_on_rumble_rl=1,
-                wheel_on_rumble_rr=1,
-                wheel_puddle_depth_fl=0.3,
-                wheel_puddle_depth_fr=0.3,
-                wheel_puddle_depth_rl=0.3,
-                wheel_puddle_depth_rr=0.3,
+                suspension_travel_meters_fl=0.28,
+                suspension_travel_meters_fr=0.28,
+                suspension_travel_meters_rl=0.26,
+                suspension_travel_meters_rr=0.26,
             ),
             Controls(throttle=0.9),
             terrain_preference="road",
         )
 
-        acceleration_reward = reward.progress + reward.speed_gain + reward.speed_bonus + reward.forward_motion_bonus
-        self.assertGreater(reward.terrain_penalty, acceleration_reward)
-        self.assertLess(reward.total, 0.0)
+        acceleration_reward = (
+            reward.progress
+            + reward.speed_gain
+            + reward.acceleration_bonus
+            + reward.speed_bonus
+            + reward.forward_motion_bonus
+        )
+        self.assertLessEqual(reward.terrain_penalty, 6.0)
+        self.assertGreater(reward.terrain_penalty, acceleration_reward * 0.55)
 
     def test_forward_motion_is_rewarded_for_road_driving(self):
         reward = score_transition(
@@ -318,14 +427,21 @@ class LearningTests(unittest.TestCase):
 
     def test_offroad_preference_rewards_controlled_offroad(self):
         reward = score_transition(
-            _frame(speed=10.0, position_x=0.0),
+            _frame(
+                speed=10.0,
+                position_x=0.0,
+                suspension_travel_meters_fl=0.18,
+                suspension_travel_meters_fr=0.18,
+                suspension_travel_meters_rl=0.17,
+                suspension_travel_meters_rr=0.17,
+            ),
             _frame(
                 speed=11.0,
                 position_x=2.0,
-                wheel_on_rumble_fl=1,
-                wheel_on_rumble_fr=1,
-                wheel_on_rumble_rl=1,
-                wheel_on_rumble_rr=1,
+                suspension_travel_meters_fl=0.20,
+                suspension_travel_meters_fr=0.20,
+                suspension_travel_meters_rl=0.19,
+                suspension_travel_meters_rr=0.19,
             ),
             Controls(throttle=0.5),
             terrain_preference="offroad",
@@ -340,10 +456,10 @@ class LearningTests(unittest.TestCase):
             _frame(
                 speed=11.0,
                 position_x=2.0,
-                wheel_on_rumble_fl=1,
-                wheel_on_rumble_fr=1,
-                wheel_on_rumble_rl=1,
-                wheel_on_rumble_rr=1,
+                suspension_travel_meters_fl=0.24,
+                suspension_travel_meters_fr=0.24,
+                suspension_travel_meters_rl=0.22,
+                suspension_travel_meters_rr=0.22,
             ),
             Controls(throttle=0.5),
             terrain_preference="mixed",
@@ -476,6 +592,60 @@ class LearningTests(unittest.TestCase):
             self.assertGreater(reward.total, 0.0)
             self.assertTrue(model_path.exists())
             self.assertGreaterEqual(prediction.throttle, 0.0)
+
+    @unittest.skipUnless(_TORCH_AVAILABLE, "PyTorch is required for the online neural policy")
+    def test_online_policy_entropy_changes_unfitted_actions(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_path = Path(temp_dir) / "profile.json"
+            profile_path.write_text(
+                """
+                {
+                  "online": {
+                    "startup_epsilon_floor": 0.0,
+                    "startup_exploration_std_floor": 0.0,
+                    "startup_entropy_std_floor": 0.0,
+                    "entropy_probability": 1.0,
+                    "entropy_warmup_multiplier": 1.0,
+                    "entropy_cap": 1.0
+                  }
+                }
+                """,
+                encoding="utf-8",
+            )
+            np.random.seed(7)
+            policy = OnlineDrivingPolicy(
+                FixedPolicy(),
+                Path(temp_dir) / "online.joblib",
+                autosave_frames=0,
+                epsilon=0.0,
+                epsilon_min=0.0,
+                exploration_std=0.0,
+                min_exploration_std=0.0,
+                entropy_std=0.20,
+                entropy_min=0.20,
+                reward_profile=load_reward_profile(profile_path),
+            )
+
+            controls = policy.predict(_frame(speed=20.0))
+
+            self.assertNotAlmostEqual(controls.steer, 0.1)
+
+    @unittest.skipUnless(_TORCH_AVAILABLE, "PyTorch is required for the online neural policy")
+    def test_no_explore_disables_entropy(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            policy = OnlineDrivingPolicy(
+                FixedPolicy(),
+                Path(temp_dir) / "online.joblib",
+                autosave_frames=0,
+                exploration_enabled=False,
+                entropy_std=0.50,
+                entropy_min=0.50,
+            )
+
+            controls = policy.predict(_frame(speed=20.0))
+
+            self.assertAlmostEqual(controls.steer, 0.1)
+            self.assertAlmostEqual(controls.throttle, 0.4)
 
 
 if __name__ == "__main__":

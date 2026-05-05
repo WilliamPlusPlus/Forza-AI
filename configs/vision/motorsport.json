@@ -9,6 +9,7 @@
   },
   "interval_frames": 45,
   "ocr_interval_frames": 60,
+  "surface_calibration": "data/vision_surface/calibration.json",
   "metric_regions": [
     {
       "name": "race_hud",

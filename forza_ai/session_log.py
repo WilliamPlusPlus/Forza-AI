@@ -61,7 +61,9 @@ class SessionLogger:
             "road": 0, "mixed": 0, "offroad": 0, "unknown": 0,
         }
         self._stuck_events = 0
+        self._crash_events = 0
         self._prev_stuck = False
+        self._prev_crash = False
 
         self.path.write_text(
             _HEADER.format(
@@ -100,6 +102,10 @@ class SessionLogger:
         if currently_stuck and not self._prev_stuck:
             self._stuck_events += 1
         self._prev_stuck = currently_stuck
+        currently_crashed = reward.crash_penalty > 0.0
+        if currently_crashed and not self._prev_crash:
+            self._crash_events += 1
+        self._prev_crash = currently_crashed
 
         if frame_num > 0 and frame_num % self.interval == 0:
             self._flush(frame_start=self._frame_start, frame_end=frame_num, policy=policy)
@@ -165,6 +171,8 @@ class SessionLogger:
         ]
         if self._stuck_events:
             lines.append(f"  stuck     {self._stuck_events} event(s) this interval")
+        if self._crash_events:
+            lines.append(f"  crash     {self._crash_events} event(s) this interval")
         lines.append("")
 
         with self.path.open("a", encoding="utf-8") as f:
@@ -180,3 +188,4 @@ class SessionLogger:
         self._speeds_ms.clear()
         self._terrain_counts = {"road": 0, "mixed": 0, "offroad": 0, "unknown": 0}
         self._stuck_events = 0
+        self._crash_events = 0

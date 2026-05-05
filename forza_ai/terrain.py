@@ -33,33 +33,48 @@ def resolve_terrain_preference(model_type: str, preference: str = "auto") -> str
     return "mixed"
 
 
-# Per-wheel field groups: (rumble_strip, surface_rumble, puddle, combined_slip, slip_ratio)
-_WHEEL_FIELDS = (
-    ("wheel_on_rumble_fl", "surface_rumble_fl", "wheel_puddle_depth_fl", "tire_combined_slip_fl", "tire_slip_ratio_fl"),
-    ("wheel_on_rumble_fr", "surface_rumble_fr", "wheel_puddle_depth_fr", "tire_combined_slip_fr", "tire_slip_ratio_fr"),
-    ("wheel_on_rumble_rl", "surface_rumble_rl", "wheel_puddle_depth_rl", "tire_combined_slip_rl", "tire_slip_ratio_rl"),
-    ("wheel_on_rumble_rr", "surface_rumble_rr", "wheel_puddle_depth_rr", "tire_combined_slip_rr", "tire_slip_ratio_rr"),
+# Per-wheel suspension travel fields. Telemetry off-road detection deliberately
+# ignores tire slip/rumble now; rough spring travel is the only telemetry signal.
+_SUSPENSION_FIELDS = (
+    "suspension_travel_meters_fl",
+    "suspension_travel_meters_fr",
+    "suspension_travel_meters_rl",
+    "suspension_travel_meters_rr",
 )
 
-# A single wheel is considered "off-road" when its score crosses this
-_WHEEL_OFFROAD_THRESHOLD = 0.10
+# A single wheel is considered "off-road" when its score crosses this.
+_WHEEL_OFFROAD_THRESHOLD = 0.20
 
 
-def _wheel_score(values: dict, rumble_f: str, surface_f: str,
-                 puddle_f: str, slip_f: str, ratio_f: str) -> float:
-    """Off-road score for a single wheel, 0.0–1.0."""
-    rumble  = min(1.0, abs(_float(values.get(rumble_f))))   # 0 or 1 rumble strip flag
-    surface = min(1.0, abs(_float(values.get(surface_f))) * 2.5)
-    puddle  = min(1.0, abs(_float(values.get(puddle_f)))  * 4.0)
-    slip    = max(0.0, min(1.0, (abs(_float(values.get(slip_f)))  - 0.15) * 3.0))
-    ratio   = max(0.0, min(1.0, (abs(_float(values.get(ratio_f))) - 0.12) * 2.5))
-    # Rumble strip and surface texture are the most reliable signals
-    return rumble * 0.42 + surface * 0.30 + puddle * 0.15 + slip * 0.09 + ratio * 0.04
+def _wheel_score(values: dict, previous_values: dict | None, travel_f: str, speed: float) -> float:
+    """Suspension-based off-road score for a single wheel, 0.0-1.0."""
+    travel = abs(_float(values.get(travel_f)))
+    previous_travel = abs(_float(previous_values.get(travel_f))) if previous_values is not None else travel
+    travel_delta = abs(travel - previous_travel)
+    travel_floor, delta_floor, compression_mult, chatter_mult = _speed_scaled_suspension_params(speed)
+    compression = max(0.0, travel - travel_floor) * compression_mult
+    chatter = max(0.0, travel_delta - delta_floor) * chatter_mult
+    return min(1.0, compression + chatter)
+
+
+def _speed_scaled_suspension_params(speed: float) -> tuple[float, float, float, float]:
+    """Return speed-aware suspension thresholds.
+
+    Slow cars do not compress suspension as violently, so small spring movement
+    should count more. Fast cars hit normal road bumps harder, so the detector
+    needs more travel/chatter before calling it off-road.
+    """
+    ratio = max(0.0, min(1.0, (speed - 2.0) / 23.0))
+    travel_floor = 0.065 + 0.055 * ratio
+    delta_floor = 0.020 + 0.025 * ratio
+    compression_mult = 4.2 - 1.2 * ratio
+    chatter_mult = 7.0 - 2.0 * ratio
+    return travel_floor, delta_floor, compression_mult, chatter_mult
 
 
 def infer_terrain(frame: TelemetryFrame, previous: TelemetryFrame | None = None) -> TerrainReading:
     values = frame.values
-    required = ("speed", "tire_combined_slip_fl", "tire_slip_ratio_fl")
+    required = ("speed", *_SUSPENSION_FIELDS)
     if any(name not in values for name in required):
         visual = _visual_surface_reading(values)
         if visual is not None:
@@ -75,7 +90,8 @@ def infer_terrain(frame: TelemetryFrame, previous: TelemetryFrame | None = None)
         return TerrainReading("unknown", 0.20)
 
     # Score every wheel independently
-    wheel_scores = [_wheel_score(values, *fields) for fields in _WHEEL_FIELDS]
+    previous_values = previous.values if previous is not None else None
+    wheel_scores = [_wheel_score(values, previous_values, field, speed) for field in _SUSPENSION_FIELDS]
     max_score  = max(wheel_scores)
     mean_score = sum(wheel_scores) / 4
     wheels_off = sum(1 for s in wheel_scores if s > _WHEEL_OFFROAD_THRESHOLD)
@@ -100,8 +116,10 @@ def infer_terrain(frame: TelemetryFrame, previous: TelemetryFrame | None = None)
 
     road_score = 1.0 - min(1.0, offroad_score)
 
-    # Thresholds tightened vs old code (was 0.25 / 0.14)
-    if offroad_score >= 0.14:
+    offroad_threshold = 0.20 if speed < 4.0 else 0.16
+    # Low-speed spring travel is informative, but avoid turning every crawl-speed
+    # pavement bump into a hard road-mode penalty.
+    if offroad_score >= offroad_threshold:
         return TerrainReading("offroad", min(1.0, offroad_score), offroad_score, road_score, wheels_off)
     # Require all wheels clearly on tarmac to call it "road"
     if max_score < 0.05 and offroad_score < 0.04:
@@ -138,18 +156,21 @@ def terrain_reward(reading: TerrainReading, preference: str, reward_profile: Any
         reward_mult = _profile_number(reward_profile, "terrain.road_reward_multiplier", 0.20)
         reward = reward_mult * reading.confidence if reading.state == "road" else 0.0
         if reading.state == "offroad":
-            # Base penalty 4.0–6.0 scaled by confidence; wheel_mult amplifies further
+            # Keep the penalty meaningful but bounded so one bad frame does not
+            # drown out several frames of useful progress/acceleration signal.
             min_penalty = _profile_number(reward_profile, "terrain.road_offroad_min_penalty", 4.0)
             penalty_mult = _profile_number(reward_profile, "terrain.road_offroad_penalty_multiplier", 6.0)
+            penalty_cap = _profile_number(reward_profile, "terrain.road_offroad_penalty_cap", 6.0)
             base_penalty = max(min_penalty, penalty_mult * reading.offroad_score)
-            penalty = base_penalty * wheel_mult
+            penalty = min(penalty_cap, base_penalty * wheel_mult)
         elif reading.state == "mixed":
             # Cobblestones / gravel edges register as mixed — keep this light.
             # Graduated: 0.10 at low offroad_score up to 0.60 at high offroad_score
             base = _profile_number(reward_profile, "terrain.road_mixed_base_penalty", 0.10)
             penalty_mult = _profile_number(reward_profile, "terrain.road_mixed_penalty_multiplier", 0.60)
+            penalty_cap = _profile_number(reward_profile, "terrain.road_mixed_penalty_cap", 1.0)
             base_penalty = base + penalty_mult * reading.offroad_score
-            penalty = base_penalty * wheel_mult
+            penalty = min(penalty_cap, base_penalty * wheel_mult)
         else:
             penalty = 0.0
         return reward, penalty
@@ -211,9 +232,9 @@ def _visual_surface_reading(values: dict) -> TerrainReading | None:
     if lane_confidence > 0.0:
         road_score = max(road_score, min(0.78, 0.56 + lane_confidence * 2.2))
         offroad_score *= max(0.55, 1.0 - lane_confidence * 3.0)
-    if _float(values.get("vision_surface_is_road")) > 0.0:
+    if _float(values.get("vision_surface_is_road")) > 0.0 or _float(values.get("vision_road_roi_is_road")) > 0.0:
         road_score = max(road_score, 0.75)
-    if _float(values.get("vision_surface_is_offroad")) > 0.0:
+    if _float(values.get("vision_surface_is_offroad")) > 0.0 or _float(values.get("vision_road_roi_is_offroad")) > 0.0:
         if road_score >= 0.50 and lane_confidence >= 0.02:
             offroad_score = max(offroad_score, 0.58)
         else:
@@ -238,6 +259,7 @@ def _visual_surface_reading(values: dict) -> TerrainReading | None:
 def _visual_road_score(values: dict) -> float:
     return max(
         _float(values.get("vision_road_score")),
+        _float(values.get("vision_road_roi_road_score")),
         _float(values.get("vision_forward_surface_road_score")),
         _float(values.get("vision_near_surface_road_score")),
     )
@@ -245,9 +267,10 @@ def _visual_road_score(values: dict) -> float:
 
 def _visual_offroad_score(values: dict, road_score: float) -> float:
     direct = _float(values.get("vision_offroad_score"))
+    roi = _float(values.get("vision_road_roi_offroad_score"))
     forward = _float(values.get("vision_forward_surface_offroad_score"))
     near = _float(values.get("vision_near_surface_offroad_score"))
-    offroad_score = max(direct, forward)
+    offroad_score = max(direct, roi, forward)
     if near <= offroad_score:
         return offroad_score
 
@@ -263,6 +286,8 @@ def _visual_offroad_score(values: dict, road_score: float) -> float:
 def _visual_lane_confidence(values: dict) -> float:
     return max(
         _float(values.get("vision_lane_confidence")),
+        _float(values.get("vision_road_roi_lane_confidence")),
+        _float(values.get("vision_road_roi_lane_marking_score")),
         _float(values.get("vision_forward_surface_lane_confidence")),
         _float(values.get("vision_near_surface_lane_confidence")),
         _float(values.get("vision_forward_surface_lane_marking_score")),

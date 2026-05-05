@@ -92,6 +92,8 @@ class CliTests(unittest.TestCase):
         self.assertTrue(args.user_override)
         self.assertTrue(args.keyboard_override)
         self.assertTrue(args.telemetry_override)
+        self.assertEqual(args.override_difference_threshold, 0.08)
+        self.assertEqual(args.override_release_frames, 24)
 
         disabled = build_parser().parse_args(
             [
@@ -109,10 +111,28 @@ class CliTests(unittest.TestCase):
         self.assertFalse(disabled.telemetry_override)
         self.assertEqual(disabled.override_difference_threshold, 0.25)
 
+    def test_drive_vision_sampling_defaults_on_and_can_be_disabled(self):
+        args = build_parser().parse_args(["drive"])
+
+        self.assertTrue(args.vision_sampling)
+        self.assertEqual(args.vision_sample_min_seconds, 3.0)
+        self.assertEqual(args.vision_sample_max_seconds, 7.0)
+
+        disabled = build_parser().parse_args(["drive", "--no-vision-sampling"])
+
+        self.assertFalse(disabled.vision_sampling)
+
     def test_vision_screens_command_is_available(self):
         args = build_parser().parse_args(["vision-screens"])
 
         self.assertEqual(args.func.__name__, "vision_screens")
+
+    def test_annotate_vision_command_is_available(self):
+        args = build_parser().parse_args(["annotate-vision", "--session", "latest", "--no-ui"])
+
+        self.assertEqual(args.func.__name__, "annotate_vision")
+        self.assertEqual(args.session, "latest")
+        self.assertTrue(args.no_ui)
 
 
 if __name__ == "__main__":

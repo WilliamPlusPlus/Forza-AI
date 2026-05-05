@@ -1,0 +1,75 @@
+================================================================================
+  FORZA AI — SELF-TRAINING SESSION LOG
+  started  : 2026-05-04 20:27:53
+  online   : models\driving\fh5-driving-online.joblib
+  mode     : mixed  |  terrain: road  |  tx: manual
+  features : 160
+================================================================================
+
+VISION SAMPLES  dir=data\vision_samples\session_2026-05-04_20-27-53
+
+VISION SAMPLE  sample_id=20260504_202800_00000433_0001  frame=433  roi=data\vision_samples\session_2026-05-04_20-27-53\images\20260504_202800_00000433_0001_roi.png
+
+VISION SAMPLE  sample_id=20260504_202806_00000867_0002  frame=867  roi=data\vision_samples\session_2026-05-04_20-27-53\images\20260504_202806_00000867_0002_roi.png
+
+VISION SAMPLE  sample_id=20260504_202812_00001339_0003  frame=1339  roi=data\vision_samples\session_2026-05-04_20-27-53\images\20260504_202812_00001339_0003_roi.png
+[00:20]  frames 1–1500
+  reward    avg +0.8028   min -1.0652   max +2.2402
+  paths     steer +0.3428  speed -0.0860  terrain +0.4467  achievement +0.0078
+  speed     avg 26.5 mph
+  terrain   road 100%
+  explore   ε=0.1077  σ=0.1137
+  model     fitted  updates=48989
+
+
+VISION SAMPLE  sample_id=20260504_202817_00001724_0004  frame=1724  roi=data\vision_samples\session_2026-05-04_20-27-53\images\20260504_202817_00001724_0004_roi.png
+[00:25]  frames 1501–1800
+  reward    avg +2.2795   min +1.7993   max +2.5724
+  paths     steer +0.7506  speed +0.6611  terrain +0.4500  achievement +0.0108
+  speed     avg 111.7 mph
+  terrain   road 100%
+  explore   ε=0.1015  σ=0.1103
+  model     fitted  updates=49289
+
+
+VISION SAMPLE  sample_id=20260504_202821_00001993_0005  frame=1993  roi=data\vision_samples\session_2026-05-04_20-27-53\images\20260504_202821_00001993_0005_roi.png
+[00:29]  frames 1801–2100
+  reward    avg +2.4880   min +2.1076   max +2.6066
+  paths     steer +0.7828  speed +0.8034  terrain +0.4500  achievement +0.0075
+  speed     avg 152.8 mph
+  terrain   road 100%
+  explore   ε=0.0956  σ=0.1071
+  model     fitted  updates=49589
+
+[00:33]  frames 2101–2400
+  reward    avg +2.4992   min +2.0418   max +2.6603
+  paths     steer +0.7400  speed +0.8683  terrain +0.4500  achievement +0.0082
+  speed     avg 177.7 mph
+  terrain   road 100%
+  explore   ε=0.0900  σ=0.1039
+  model     fitted  updates=49889
+
+
+VISION SAMPLE  sample_id=20260504_202827_00002405_0006  frame=2405  roi=data\vision_samples\session_2026-05-04_20-27-53\images\20260504_202827_00002405_0006_roi.png
+
+VISION SAMPLE  sample_id=20260504_202830_00002649_0007  frame=2649  roi=data\vision_samples\session_2026-05-04_20-27-53\images\20260504_202830_00002649_0007_roi.png
+
+VISION SAMPLE  sample_id=20260504_202837_00003119_0008  frame=3119  roi=data\vision_samples\session_2026-05-04_20-27-53\images\20260504_202837_00003119_0008_roi.png
+
+VISION SAMPLE  sample_id=20260504_202841_00003445_0009  frame=3445  roi=data\vision_samples\session_2026-05-04_20-27-53\images\20260504_202841_00003445_0009_roi.png
+
+VISION SAMPLE  sample_id=20260504_202846_00003765_0010  frame=3765  roi=data\vision_samples\session_2026-05-04_20-27-53\images\20260504_202846_00003765_0010_roi.png
+
+VISION SAMPLE  sample_id=20260504_202851_00004111_0011  frame=4111  roi=data\vision_samples\session_2026-05-04_20-27-53\images\20260504_202851_00004111_0011_roi.png
+
+VISION SAMPLE  sample_id=20260504_202856_00004517_0012  frame=4517  roi=data\vision_samples\session_2026-05-04_20-27-53\images\20260504_202856_00004517_0012_roi.png
+
+VISION SAMPLE  sample_id=20260504_202900_00004792_0013  frame=4792  roi=data\vision_samples\session_2026-05-04_20-27-53\images\20260504_202900_00004792_0013_roi.png
+
+VISION SAMPLE  sample_id=20260504_202906_00005204_0014  frame=5204  roi=data\vision_samples\session_2026-05-04_20-27-53\images\20260504_202906_00005204_0014_roi.png
+
+VISION SAMPLE  sample_id=20260504_202910_00005525_0015  frame=5525  roi=data\vision_samples\session_2026-05-04_20-27-53\images\20260504_202910_00005525_0015_roi.png
+
+VISION SAMPLE  sample_id=20260504_202914_00005789_0016  frame=5789  roi=data\vision_samples\session_2026-05-04_20-27-53\images\20260504_202914_00005789_0016_roi.png
+
+VISION SAMPLE  sample_id=20260504_202918_00006073_0017  frame=6073  roi=data\vision_samples\session_2026-05-04_20-27-53\images\20260504_202918_00006073_0017_roi.png

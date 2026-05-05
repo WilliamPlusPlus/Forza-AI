@@ -23,6 +23,7 @@ DEFAULT_VISION_PROFILE: dict[str, Any] = {
     },
     "interval_frames": 30,
     "ocr_interval_frames": 45,
+    "surface_calibration": "data/vision_surface/calibration.json",
     "metric_regions": [],
     "surface_regions": [],
     "ocr_regions": [],
@@ -43,6 +44,9 @@ class VisualCueReader:
     _capture_error: str | None = field(default=None, init=False, repr=False)
     _ocr_error: str | None = field(default=None, init=False, repr=False)
     _last_target_status: str = field(default="", init=False, repr=False)
+    _surface_calibration: dict[str, Any] | None = field(default=None, init=False, repr=False)
+    _calibration_path: Path | None = field(default=None, init=False, repr=False)
+    _calibration_mtime: float = field(default=-1.0, init=False, repr=False)
     _pil: Any = field(default=None, init=False, repr=False)
     _tesseract: Any = field(default=None, init=False, repr=False)
 
@@ -52,9 +56,11 @@ class VisualCueReader:
         if not self.enabled:
             return
         try:
-            from PIL import ImageFilter, ImageGrab, ImageOps, ImageStat
+            from PIL import Image, ImageDraw, ImageFilter, ImageGrab, ImageOps, ImageStat
 
             self._pil = {
+                "Image": Image,
+                "ImageDraw": ImageDraw,
                 "ImageFilter": ImageFilter,
                 "ImageGrab": ImageGrab,
                 "ImageOps": ImageOps,
@@ -75,6 +81,8 @@ class VisualCueReader:
             self._tesseract = pytesseract
         except ImportError:
             self._tesseract = None
+        self._calibration_path = _resolve_optional_path(self.profile.get("surface_calibration"))
+        self._load_surface_calibration()
 
     @property
     def status(self) -> str:
@@ -139,6 +147,7 @@ class VisualCueReader:
 
         surface_scores: list[tuple[float, float]] = []
         lane_scores: list[tuple[float, float]] = []
+        road_direction_scores: list[tuple[float, float, float]] = []
         for region in self.profile.get("surface_regions", []) or []:
             if not isinstance(region, dict):
                 continue
@@ -158,6 +167,13 @@ class VisualCueReader:
                     float(metrics.get(f"vision_{name}_lane_center_offset", 0.0) or 0.0),
                     lane_confidence,
                 ))
+            road_confidence = float(metrics.get(f"vision_{name}_road_score", 0.0) or 0.0)
+            if road_confidence > 0.0:
+                road_direction_scores.append((
+                    float(metrics.get(f"vision_{name}_road_center_offset", 0.0) or 0.0),
+                    float(metrics.get(f"vision_{name}_road_heading", 0.0) or 0.0),
+                    road_confidence,
+                ))
         if surface_scores:
             road_score = sum(score[0] for score in surface_scores) / len(surface_scores)
             offroad_score = sum(score[1] for score in surface_scores) / len(surface_scores)
@@ -175,6 +191,18 @@ class VisualCueReader:
                 ) / total_confidence
                 values["vision_lane_confidence"] = min(1.0, total_confidence / len(lane_scores))
                 values["vision_lane_visible"] = 1 if values["vision_lane_confidence"] >= 0.015 else 0
+        if road_direction_scores:
+            total_confidence = sum(max(0.0, score[2]) for score in road_direction_scores)
+            if total_confidence > 0.0:
+                values["vision_road_center_offset"] = sum(
+                    offset * max(0.0, confidence)
+                    for offset, _heading, confidence in road_direction_scores
+                ) / total_confidence
+                values["vision_road_heading"] = sum(
+                    heading * max(0.0, confidence)
+                    for _offset, heading, confidence in road_direction_scores
+                ) / total_confidence
+                values["vision_road_direction_confidence"] = min(1.0, total_confidence / len(road_direction_scores))
 
         if ocr_due and self._tesseract is not None:
             self._last_ocr_frame = frame_number
@@ -217,6 +245,28 @@ class VisualCueReader:
             values["vision_skill_visible"] = 0
         return values
 
+    def capture_sample(self) -> tuple[Any, dict[str, float | int | str]] | None:
+        """Capture the current vision target for manual training samples."""
+        if not self.enabled or self._capture_error or self._pil is None:
+            return None
+        try:
+            screenshot, target_values = self._capture_target()
+        except Exception as exc:  # pragma: no cover - depends on local desktop access
+            self._capture_error = str(exc)
+            return None
+        return screenshot, target_values
+
+    def training_region_image(self, screenshot: Any) -> Any | None:
+        """Return the first configured surface ROI with its polygon mask applied."""
+        for region in self.profile.get("surface_regions", []) or []:
+            if not isinstance(region, dict):
+                continue
+            crop = self._crop(screenshot, region.get("bbox"))
+            if crop is None:
+                continue
+            return self._apply_region_mask(crop, region)
+        return None
+
     def _crop(self, screenshot: Any, bbox: Any) -> Any | None:
         if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
             return None
@@ -249,7 +299,8 @@ class VisualCueReader:
 
     def _surface_metrics(self, name: str, image: Any, region: dict[str, Any]) -> dict[str, float | int]:
         rgb = np.asarray(image.convert("RGB").resize((80, 45)), dtype=np.float32) / 255.0
-        scores = visual_surface_scores(rgb)
+        mask = _resize_bool_mask(self._region_mask(image.size, region), (80, 45))
+        scores = visual_surface_scores(rgb, mask=mask, calibration=self._current_surface_calibration())
         road_score = scores["road_score"]
         offroad_score = scores["offroad_score"]
         lane_score = scores["lane_marking_score"]
@@ -267,9 +318,62 @@ class VisualCueReader:
             f"vision_{name}_lane_center_offset": scores["lane_center_offset"],
             f"vision_{name}_lane_confidence": scores["lane_confidence"],
             f"vision_{name}_lane_visible": 1 if lane_score >= lane_threshold else 0,
+            f"vision_{name}_road_center_offset": scores["road_center_offset"],
+            f"vision_{name}_road_heading": scores["road_heading"],
             f"vision_{name}_is_road": 1 if road_score >= road_threshold and road_score > offroad_score + margin else 0,
             f"vision_{name}_is_offroad": 1 if offroad_score >= offroad_threshold and offroad_score > road_score + margin else 0,
         }
+
+    def _region_mask(self, size: tuple[int, int], region: dict[str, Any]) -> np.ndarray | None:
+        polygon = region.get("polygon")
+        exclude_polygons = region.get("exclude_polygons", [])
+        if not polygon and not exclude_polygons:
+            return None
+        width, height = size
+        image = self._pil["Image"].new("L", (width, height), 0 if polygon else 255)
+        draw = self._pil["ImageDraw"].Draw(image)
+        if polygon:
+            points = _pixel_polygon(polygon, width, height)
+            if len(points) >= 3:
+                draw.polygon(points, fill=255)
+        for excluded in exclude_polygons or []:
+            points = _pixel_polygon(excluded, width, height)
+            if len(points) >= 3:
+                draw.polygon(points, fill=0)
+        return np.asarray(image, dtype=np.uint8) > 0
+
+    def _apply_region_mask(self, image: Any, region: dict[str, Any]) -> Any:
+        mask = self._region_mask(image.size, region)
+        if mask is None:
+            return image
+        arr = np.asarray(image.convert("RGB"), dtype=np.uint8).copy()
+        arr[~mask] = 0
+        return self._pil["Image"].fromarray(arr, mode="RGB")
+
+    def _current_surface_calibration(self) -> dict[str, Any] | None:
+        self._load_surface_calibration()
+        return self._surface_calibration
+
+    def _load_surface_calibration(self) -> None:
+        if self._calibration_path is None:
+            self._surface_calibration = None
+            return
+        try:
+            mtime = self._calibration_path.stat().st_mtime
+        except OSError:
+            self._surface_calibration = None
+            self._calibration_mtime = -1.0
+            return
+        if mtime == self._calibration_mtime:
+            return
+        try:
+            loaded = json.loads(self._calibration_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            self._surface_calibration = None
+            self._calibration_mtime = mtime
+            return
+        self._surface_calibration = loaded if isinstance(loaded, dict) else None
+        self._calibration_mtime = mtime
 
     def _ocr(self, image: Any, region: dict[str, Any]) -> str:
         image_ops = self._pil["ImageOps"]
@@ -453,7 +557,12 @@ def _multiplier(text: str) -> float | None:
     return float(match.group(1))
 
 
-def visual_surface_scores(rgb: np.ndarray) -> dict[str, float]:
+def visual_surface_scores(
+    rgb: np.ndarray,
+    *,
+    mask: np.ndarray | None = None,
+    calibration: dict[str, Any] | None = None,
+) -> dict[str, float]:
     """Classify a forward-view crop as road-like or off-road-like.
 
     This is a lightweight visual object cue, not a full neural detector. It
@@ -466,6 +575,9 @@ def visual_surface_scores(rgb: np.ndarray) -> dict[str, float]:
     if arr.max(initial=0.0) > 1.0:
         arr = arr / 255.0
     if arr.ndim != 3 or arr.shape[-1] < 3:
+        return _surface_score_dict(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    valid = _valid_mask(mask, arr.shape[:2])
+    if valid is not None and not np.any(valid):
         return _surface_score_dict(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
     red = np.clip(arr[..., 0], 0.0, 1.0)
@@ -503,17 +615,25 @@ def visual_surface_scores(rgb: np.ndarray) -> dict[str, float]:
         & (blue < 0.25)
     )
 
-    texture = float(np.std(brightness))
-    grass_score = float(np.mean(green_mask))
-    dirt_score = float(np.mean(dirt_mask))
-    asphalt_score = float(np.mean(asphalt_mask))
-    lane_score = float(np.mean(lane_mask))
-    lane_offset = _lane_center_offset(lane_mask)
+    texture = _masked_std(brightness, valid)
+    grass_score = _masked_mean(green_mask, valid)
+    dirt_score = _masked_mean(dirt_mask, valid)
+    asphalt_score = _masked_mean(asphalt_mask, valid)
+    lane_score = _masked_mean(lane_mask, valid)
+    lane_offset = _lane_center_offset(lane_mask, valid)
+    road_mask = asphalt_mask | lane_mask
+    road_offset = _mask_center_offset(road_mask, valid)
+    road_heading = _mask_heading(road_mask, valid)
     offroad_score = _clamp01(grass_score * 0.72 + dirt_score * 0.62 + max(0.0, texture - 0.18) * 0.70)
     road_score = _clamp01(asphalt_score * 0.72 + lane_score * 0.45 + max(0.0, 0.28 - texture) * 0.25)
     road_context = max(asphalt_score * 0.65, lane_score * 2.5)
     if road_context > 0.18:
         offroad_score *= max(0.52, 1.0 - road_context * 0.55)
+    calibrated_road, calibrated_dirt = _calibrated_surface_scores(arr, valid, calibration)
+    if calibrated_road > 0.0 or calibrated_dirt > 0.0:
+        weight = _calibration_weight(calibration)
+        road_score = _clamp01(road_score * (1.0 - weight) + calibrated_road * weight)
+        offroad_score = _clamp01(offroad_score * (1.0 - weight) + calibrated_dirt * weight)
     return _surface_score_dict(
         road_score,
         offroad_score,
@@ -522,6 +642,8 @@ def visual_surface_scores(rgb: np.ndarray) -> dict[str, float]:
         asphalt_score,
         lane_score,
         lane_offset,
+        road_offset,
+        road_heading,
     )
 
 
@@ -533,6 +655,8 @@ def _surface_score_dict(
     asphalt_score: float,
     lane_score: float,
     lane_center_offset: float = 0.0,
+    road_center_offset: float = 0.0,
+    road_heading: float = 0.0,
 ) -> dict[str, float]:
     return {
         "road_score": _clamp01(road_score),
@@ -543,16 +667,119 @@ def _surface_score_dict(
         "lane_marking_score": _clamp01(lane_score),
         "lane_center_offset": max(-1.0, min(1.0, float(lane_center_offset))),
         "lane_confidence": _clamp01(lane_score),
+        "road_center_offset": max(-1.0, min(1.0, float(road_center_offset))),
+        "road_heading": max(-1.0, min(1.0, float(road_heading))),
     }
 
 
-def _lane_center_offset(lane_mask: np.ndarray) -> float:
+def _lane_center_offset(lane_mask: np.ndarray, valid: np.ndarray | None = None) -> float:
+    if valid is not None:
+        lane_mask = lane_mask & valid
     if lane_mask.size == 0 or not np.any(lane_mask):
         return 0.0
     width = lane_mask.shape[1]
     x_positions = np.linspace(-1.0, 1.0, width, dtype=np.float32)
     weights = lane_mask.astype(np.float32)
     return float(np.sum(weights * x_positions[np.newaxis, :]) / max(1e-6, float(np.sum(weights))))
+
+
+def _mask_center_offset(mask: np.ndarray, valid: np.ndarray | None = None) -> float:
+    if valid is not None:
+        mask = mask & valid
+    if mask.size == 0 or not np.any(mask):
+        return 0.0
+    width = mask.shape[1]
+    x_positions = np.linspace(-1.0, 1.0, width, dtype=np.float32)
+    weights = mask.astype(np.float32)
+    return float(np.sum(weights * x_positions[np.newaxis, :]) / max(1e-6, float(np.sum(weights))))
+
+
+def _mask_heading(mask: np.ndarray, valid: np.ndarray | None = None) -> float:
+    if valid is not None:
+        mask = mask & valid
+    if mask.size == 0 or not np.any(mask):
+        return 0.0
+    height = mask.shape[0]
+    if height < 4:
+        return 0.0
+    top = mask[: height // 2, :]
+    bottom = mask[height // 2 :, :]
+    if not np.any(top) or not np.any(bottom):
+        return 0.0
+    return max(-1.0, min(1.0, _mask_center_offset(top) - _mask_center_offset(bottom)))
+
+
+def _valid_mask(mask: np.ndarray | None, shape: tuple[int, int]) -> np.ndarray | None:
+    if mask is None:
+        return None
+    arr = np.asarray(mask, dtype=bool)
+    if arr.shape != shape:
+        return None
+    return arr
+
+
+def _masked_mean(values: np.ndarray, valid: np.ndarray | None) -> float:
+    if valid is None:
+        return float(np.mean(values))
+    return float(np.mean(values[valid])) if np.any(valid) else 0.0
+
+
+def _masked_std(values: np.ndarray, valid: np.ndarray | None) -> float:
+    if valid is None:
+        return float(np.std(values))
+    return float(np.std(values[valid])) if np.any(valid) else 0.0
+
+
+def _calibrated_surface_scores(
+    rgb: np.ndarray,
+    valid: np.ndarray | None,
+    calibration: dict[str, Any] | None,
+) -> tuple[float, float]:
+    if not calibration:
+        return 0.0, 0.0
+    pixels = rgb[valid] if valid is not None else rgb.reshape((-1, rgb.shape[-1]))
+    if pixels.size == 0:
+        return 0.0, 0.0
+    mean_rgb = np.mean(pixels[..., :3], axis=0)
+    road = _centroid_similarity(mean_rgb, calibration.get("road_rgb_mean"))
+    dirt = max(
+        _centroid_similarity(mean_rgb, calibration.get("dirt_rgb_mean")),
+        _centroid_similarity(mean_rgb, calibration.get("offroad_rgb_mean")),
+    )
+    return road, dirt
+
+
+def _centroid_similarity(mean_rgb: np.ndarray, centroid: Any) -> float:
+    if not isinstance(centroid, (list, tuple)) or len(centroid) < 3:
+        return 0.0
+    try:
+        target = np.asarray([float(centroid[0]), float(centroid[1]), float(centroid[2])], dtype=np.float32)
+    except (TypeError, ValueError):
+        return 0.0
+    if target.max(initial=0.0) > 1.0:
+        target = target / 255.0
+    dist = float(np.linalg.norm(mean_rgb[:3] - target[:3]))
+    return _clamp01(1.0 - dist / 0.75)
+
+
+def _calibration_weight(calibration: dict[str, Any] | None) -> float:
+    if not calibration:
+        return 0.0
+    try:
+        return max(0.0, min(0.65, float(calibration.get("weight", 0.35))))
+    except (TypeError, ValueError):
+        return 0.35
+
+
+def _resize_bool_mask(mask: np.ndarray | None, size: tuple[int, int]) -> np.ndarray | None:
+    if mask is None:
+        return None
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    image = Image.fromarray(mask.astype(np.uint8) * 255, mode="L").resize(size)
+    return np.asarray(image, dtype=np.uint8) > 0
 
 
 def _clamp01(value: float) -> float:
@@ -569,6 +796,34 @@ def _float_config(region: dict[str, Any], name: str, default: float) -> float:
 def _safe_name(value: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9]+", "_", value.strip().lower()).strip("_")
     return cleaned or "cue"
+
+
+def _resolve_optional_path(value: Any) -> Path | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return Path(text)
+
+
+def _pixel_polygon(points: Any, width: int, height: int) -> list[tuple[int, int]]:
+    result: list[tuple[int, int]] = []
+    if not isinstance(points, (list, tuple)):
+        return result
+    for point in points:
+        if not isinstance(point, (list, tuple)) or len(point) < 2:
+            continue
+        try:
+            x = float(point[0])
+            y = float(point[1])
+        except (TypeError, ValueError):
+            continue
+        if 0.0 <= x <= 1.0 and 0.0 <= y <= 1.0:
+            x *= width
+            y *= height
+        result.append((int(round(x)), int(round(y))))
+    return result
 
 
 def _apply_target_overrides(

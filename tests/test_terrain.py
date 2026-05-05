@@ -36,6 +36,10 @@ def _frame(**values):
         "tire_slip_ratio_fr": 0.03,
         "tire_slip_ratio_rl": 0.03,
         "tire_slip_ratio_rr": 0.03,
+        "suspension_travel_meters_fl": 0.03,
+        "suspension_travel_meters_fr": 0.03,
+        "suspension_travel_meters_rl": 0.03,
+        "suspension_travel_meters_rr": 0.03,
     }
     defaults.update(values)
     return TelemetryFrame(received_at=0.0, profile="horizon_dash", values=defaults)
@@ -45,18 +49,45 @@ class TerrainTests(unittest.TestCase):
     def test_low_slip_no_rumble_is_road(self):
         self.assertEqual(infer_terrain(_frame()).state, "road")
 
-    def test_rumble_or_puddle_while_moving_is_offroad(self):
+    def test_suspension_travel_while_moving_is_offroad(self):
         frame = _frame(
-            wheel_on_rumble_fl=1,
-            wheel_on_rumble_fr=1,
-            wheel_on_rumble_rl=1,
-            wheel_on_rumble_rr=1,
-            wheel_puddle_depth_fl=0.2,
+            suspension_travel_meters_fl=0.24,
+            suspension_travel_meters_fr=0.24,
+            suspension_travel_meters_rl=0.22,
+            suspension_travel_meters_rr=0.22,
         )
 
         self.assertEqual(infer_terrain(frame).state, "offroad")
 
-    def test_high_slip_with_poor_movement_is_not_road(self):
+    def test_low_speed_suspension_travel_is_more_sensitive(self):
+        frame = _frame(
+            speed=2.0,
+            suspension_travel_meters_fl=0.12,
+            suspension_travel_meters_fr=0.12,
+            suspension_travel_meters_rl=0.11,
+            suspension_travel_meters_rr=0.11,
+        )
+
+        reading = infer_terrain(frame)
+
+        self.assertEqual(reading.state, "offroad")
+        self.assertGreater(reading.offroad_score, 0.14)
+
+    def test_fast_road_bumps_need_more_suspension_travel(self):
+        frame = _frame(
+            speed=35.0,
+            suspension_travel_meters_fl=0.13,
+            suspension_travel_meters_fr=0.13,
+            suspension_travel_meters_rl=0.12,
+            suspension_travel_meters_rr=0.12,
+        )
+
+        reading = infer_terrain(frame)
+
+        self.assertNotEqual(reading.state, "offroad")
+        self.assertLess(reading.offroad_score, 0.14)
+
+    def test_high_slip_with_poor_movement_does_not_mark_offroad(self):
         previous = _frame(position_x=0.0, speed=8.0)
         current = _frame(
             position_x=0.05,
@@ -67,9 +98,9 @@ class TerrainTests(unittest.TestCase):
             tire_combined_slip_rr=0.9,
         )
 
-        self.assertIn(infer_terrain(current, previous).state, {"offroad", "mixed"})
+        self.assertNotEqual(infer_terrain(current, previous).state, "offroad")
 
-    def test_live_sample_like_surface_and_slip_reads_offroad(self):
+    def test_live_sample_like_surface_and_slip_without_suspension_stays_road(self):
         frame = _frame(
             speed=21.3,
             surface_rumble_fl=0.12,
@@ -88,8 +119,8 @@ class TerrainTests(unittest.TestCase):
 
         reading = infer_terrain(frame)
 
-        self.assertEqual(reading.state, "offroad")
-        self.assertGreaterEqual(reading.offroad_score, 0.25)
+        self.assertNotEqual(reading.state, "offroad")
+        self.assertLess(reading.offroad_score, 0.14)
 
     def test_missing_or_stationary_data_is_unknown(self):
         self.assertEqual(infer_terrain(TelemetryFrame(0.0, "horizon_dash", {})).state, "unknown")
@@ -127,6 +158,29 @@ class TerrainTests(unittest.TestCase):
         scores = visual_surface_scores(image)
 
         self.assertGreater(scores["road_score"], scores["offroad_score"])
+
+    def test_visual_surface_scores_can_limit_detection_to_masked_region(self):
+        image = np.full((20, 20, 3), 0.35, dtype=np.float32)
+        image[:, 10:, 0] = 0.70
+        image[:, 10:, 1] = 0.46
+        image[:, 10:, 2] = 0.12
+        mask = np.zeros((20, 20), dtype=bool)
+        mask[:, :10] = True
+
+        scores = visual_surface_scores(image, mask=mask)
+
+        self.assertGreater(scores["road_score"], scores["offroad_score"])
+
+    def test_road_roi_visual_fields_feed_terrain_classifier(self):
+        reading = infer_terrain(
+            _frame(
+                vision_road_roi_road_score=0.80,
+                vision_road_roi_offroad_score=0.05,
+                vision_road_roi_is_road=1,
+            )
+        )
+
+        self.assertEqual(reading.state, "road")
 
     def test_forward_road_view_beats_nearby_dirt_at_speed(self):
         reading = infer_terrain(
@@ -186,7 +240,14 @@ class TerrainTests(unittest.TestCase):
 
     def test_terrain_reward_matches_preference(self):
         road = infer_terrain(_frame())
-        offroad = infer_terrain(_frame(wheel_on_rumble_fl=1, wheel_on_rumble_fr=1, wheel_on_rumble_rl=1, wheel_on_rumble_rr=1))
+        offroad = infer_terrain(
+            _frame(
+                suspension_travel_meters_fl=0.24,
+                suspension_travel_meters_fr=0.24,
+                suspension_travel_meters_rl=0.22,
+                suspension_travel_meters_rr=0.22,
+            )
+        )
 
         road_bonus, road_penalty = terrain_reward(road, "road")
         offroad_bonus, offroad_penalty = terrain_reward(offroad, "road")

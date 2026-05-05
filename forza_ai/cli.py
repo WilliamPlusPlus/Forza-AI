@@ -21,6 +21,13 @@ from .trainer import train_model
 from .transmission import TRANSMISSION_MODES, ShiftAdvisor, normalize_transmission_mode
 from .user_input import KeyboardOverrideReader, UserOverride, telemetry_user_override
 from .vision import create_visual_cue_reader, default_vision_profile_path, list_vision_screens
+from .vision_training import (
+    DEFAULT_CALIBRATION_PATH,
+    DEFAULT_LABELS_PATH,
+    DEFAULT_SAMPLE_ROOT,
+    VisionTrainingSampler,
+    annotate_vision_samples,
+)
 
 
 def _resolve_vision_enabled(args: argparse.Namespace, config_value: bool | None) -> bool | None:
@@ -51,7 +58,7 @@ def _select_user_override(
         return telemetry_user_override(
             frame,
             last_program_controls,
-            difference_threshold=getattr(args, "override_difference_threshold", 0.18),
+            difference_threshold=getattr(args, "override_difference_threshold", 0.08),
         )
     return None
 
@@ -159,6 +166,16 @@ def vision_screens(args: argparse.Namespace) -> int:
     return 0
 
 
+def annotate_vision(args: argparse.Namespace) -> int:
+    return annotate_vision_samples(
+        args.session,
+        root=args.root,
+        labels_path=args.labels,
+        calibration_path=args.calibration,
+        use_ui=not args.no_ui,
+    )
+
+
 def drive(args: argparse.Namespace) -> int:
     base_model_path = Path(args.model) if args.model else model_path(args.name, args.type)
     online_path = Path(args.online_model) if args.online_model else online_model_path(args.name, args.type)
@@ -171,9 +188,10 @@ def drive(args: argparse.Namespace) -> int:
     reward_profile_path = args.reward_profile or config.learning.reward_profile or default_reward_profile_path(config.telemetry.profile)
     reward_profile = load_reward_profile(reward_profile_path)
     vision_path = args.vision_profile or config.learning.vision_profile or default_vision_profile_path(config.telemetry.profile)
+    vision_enabled = _resolve_vision_enabled(args, config.learning.vision_enabled)
     vision_reader = create_visual_cue_reader(
         vision_path,
-        enabled=_resolve_vision_enabled(args, config.learning.vision_enabled),
+        enabled=vision_enabled,
         target_mode=getattr(args, "vision_target", None),
         screen_index=getattr(args, "vision_screen", None),
         window_title=getattr(args, "vision_window_title", None),
@@ -227,7 +245,8 @@ def drive(args: argparse.Namespace) -> int:
             speed_weight=speed_weight,
             terrain_weight=terrain_weight,
             achievement_weight=achievement_weight,
-            # Flatten both exploration knobs to minimum when disabled
+            # Flatten exploration/entropy knobs when disabled
+            exploration_enabled=explore,
             epsilon=reward_profile.number("online.epsilon", 0.15) if explore else 0.0,
             epsilon_min=reward_profile.number("online.epsilon_min", 0.05) if explore else 0.0,
             exploration_std=reward_profile.number("online.exploration_std", 0.18) if explore else 0.0,
@@ -244,6 +263,20 @@ def drive(args: argparse.Namespace) -> int:
             n_features=len(online_policy.features),
             interval_frames=args.autosave_frames,
         )
+    vision_sampler = VisionTrainingSampler(
+        vision_reader,
+        enabled=bool(getattr(args, "vision_sampling", True)) and bool(vision_reader.enabled),
+        root=getattr(args, "vision_sample_dir", DEFAULT_SAMPLE_ROOT),
+        min_interval_seconds=getattr(args, "vision_sample_min_seconds", 3.0),
+        max_interval_seconds=getattr(args, "vision_sample_max_seconds", 7.0),
+        session_log=session_logger.path if session_logger is not None else None,
+    )
+    if session_logger is not None and vision_sampler.session_dir is not None:
+        try:
+            with session_logger.path.open("a", encoding="utf-8") as handle:
+                handle.write(f"\nVISION SAMPLES  dir={vision_sampler.session_dir}\n")
+        except OSError:
+            pass
     policy = SmoothPolicy(
         base,
         max_steer_delta=config.drive.max_steer_delta,
@@ -277,11 +310,15 @@ def drive(args: argparse.Namespace) -> int:
             f"and {terrain_preference} terrain preference. "
             f"Rewards={reward_profile.name}; "
             f"learning={'enabled -> ' + str(online_path) if online_policy is not None else 'disabled'}; "
-            f"{vision_reader.status}. Press Ctrl+C to stop."
+            f"{vision_reader.status}; "
+            f"vision samples={vision_sampler.session_dir if vision_sampler.session_dir is not None else 'disabled'}. "
+            "Press Ctrl+C to stop."
         )
     seen = 0
     previous_frame = None
     last_program_controls: Controls | None = None
+    override_hold_frames = 0
+    last_override_source = ""
     redline_estimator = RedlineEstimator()
     previous_learning_frame = None
     previous_learning_controls = None
@@ -312,6 +349,9 @@ def drive(args: argparse.Namespace) -> int:
                 previous_learning_controls = None
                 continue
             if is_driving_frame(frame):
+                sample = vision_sampler.maybe_capture(frame, seen)
+                if sample is not None and args.no_ui:
+                    print(f"vision sample {sample['sample_id']} -> {sample['roi_path']}")
                 if online_policy is not None and previous_learning_frame is not None and previous_learning_controls is not None:
                     reward = online_policy.learn(previous_learning_frame, frame, previous_learning_controls)
                     if session_logger is not None:
@@ -330,7 +370,10 @@ def drive(args: argparse.Namespace) -> int:
                     frame=frame,
                     last_program_controls=last_program_controls,
                 )
+                holding_override = False
                 if override is not None:
+                    override_hold_frames = max(0, int(getattr(args, "override_release_frames", 24) or 0))
+                    last_override_source = override.source
                     controls = override.controls.clipped()
                     frame.values["user_override_active"] = 1
                     frame.values["user_override_source"] = override.source
@@ -340,11 +383,26 @@ def drive(args: argparse.Namespace) -> int:
                     else:
                         controller.neutral()
                         last_program_controls = Controls()
+                    if hasattr(policy, "previous"):
+                        policy.previous = last_program_controls
+                    learn_this_frame = True
+                elif override_hold_frames > 0:
+                    override_hold_frames -= 1
+                    holding_override = True
+                    controls = Controls()
+                    frame.values["user_override_active"] = 1
+                    frame.values["user_override_source"] = f"{last_override_source} hold" if last_override_source else "user override hold"
+                    controller.neutral()
+                    last_program_controls = Controls()
+                    if hasattr(policy, "previous"):
+                        policy.previous = Controls()
+                    learn_this_frame = False
                 else:
                     frame.values["user_override_active"] = 0
                     controls = shift_advisor.apply(policy.predict(frame), frame)
                     controller.apply(controls)
                     last_program_controls = controls
+                    learn_this_frame = True
                 reward_message = None
                 if online_policy is not None and online_policy.last_reward is not None:
                     reward_message = (
@@ -354,9 +412,16 @@ def drive(args: argparse.Namespace) -> int:
                 if override is not None:
                     suffix = f"User override: {override.source}"
                     reward_message = f"{reward_message}; {suffix}" if reward_message else suffix
+                elif holding_override:
+                    suffix = f"User override hold: {last_override_source}"
+                    reward_message = f"{reward_message}; {suffix}" if reward_message else suffix
                 dashboard.update(frame=frame, controls=controls, frames_seen=seen, message=reward_message)
-                previous_learning_frame = frame
-                previous_learning_controls = controls
+                if learn_this_frame:
+                    previous_learning_frame = frame
+                    previous_learning_controls = controls
+                else:
+                    previous_learning_frame = None
+                    previous_learning_controls = None
             else:
                 controller.neutral()
                 last_program_controls = Controls()
@@ -420,6 +485,14 @@ def build_parser() -> argparse.ArgumentParser:
     screens_parser = sub.add_parser("vision-screens", help="List detected screen indexes for OCR/vision capture.")
     screens_parser.set_defaults(func=vision_screens)
 
+    annotate_parser = sub.add_parser("annotate-vision", help="Label saved road/dirt vision samples and rebuild calibration.")
+    annotate_parser.add_argument("--session", default="latest", help="Vision sample session directory, or latest.")
+    annotate_parser.add_argument("--root", default=str(DEFAULT_SAMPLE_ROOT), help="Vision sample root directory.")
+    annotate_parser.add_argument("--labels", default=str(DEFAULT_LABELS_PATH), help="Global JSONL label store to update.")
+    annotate_parser.add_argument("--calibration", default=str(DEFAULT_CALIBRATION_PATH), help="Calibration JSON file to rebuild.")
+    annotate_parser.add_argument("--no-ui", action="store_true", help="Use terminal prompts instead of the small labeling window.")
+    annotate_parser.set_defaults(func=annotate_vision)
+
     drive_parser = sub.add_parser("drive", help="Drive with a trained model or cautious fallback policy.")
     drive_parser.add_argument("--config", default="configs/horizon.toml")
     drive_parser.add_argument("--name", default=DEFAULT_NAME, help="Model/route name used for automatic file paths.")
@@ -448,6 +521,11 @@ def build_parser() -> argparse.ArgumentParser:
     drive_parser.add_argument("--vision-target", choices=("desktop", "screen", "window"), help="What OCR/vision follows for this run.")
     drive_parser.add_argument("--vision-screen", type=int, help="Screen number to follow when --vision-target screen is used.")
     drive_parser.add_argument("--vision-window-title", "--vision-app", help="Window/app title to follow when --vision-target window is used.")
+    drive_parser.add_argument("--vision-sampling", dest="vision_sampling", action="store_true", default=True, help="Save periodic road-region screenshots for manual labeling (default on).")
+    drive_parser.add_argument("--no-vision-sampling", dest="vision_sampling", action="store_false", help="Do not save manual-label vision samples this run.")
+    drive_parser.add_argument("--vision-sample-dir", default=str(DEFAULT_SAMPLE_ROOT), help="Directory for periodic vision training screenshots.")
+    drive_parser.add_argument("--vision-sample-min-seconds", type=float, default=3.0, help="Minimum seconds between vision training screenshots.")
+    drive_parser.add_argument("--vision-sample-max-seconds", type=float, default=7.0, help="Maximum seconds between vision training screenshots.")
     drive_parser.add_argument("--score-weight", type=float, help="Reward weight for skill score/points gains when those fields are available.")
     drive_parser.add_argument("--track")
     drive_parser.add_argument("--terrain-preference", choices=TERRAIN_PREFERENCES, default="auto", help="Terrain reward preference while learning.")
@@ -464,7 +542,8 @@ def build_parser() -> argparse.ArgumentParser:
     drive_parser.add_argument("--no-keyboard-override", dest="keyboard_override", action="store_false", help="Disable keyboard polling override.")
     drive_parser.add_argument("--telemetry-override", dest="telemetry_override", action="store_true", default=True, help="Let human controller telemetry override AI control when it differs from program output (default on).")
     drive_parser.add_argument("--no-telemetry-override", dest="telemetry_override", action="store_false", help="Disable telemetry-based human override detection.")
-    drive_parser.add_argument("--override-difference-threshold", type=float, default=0.18, help="How different telemetry input must be from program output before it counts as human override.")
+    drive_parser.add_argument("--override-difference-threshold", type=float, default=0.08, help="How different telemetry input must be from program output before it counts as human override.")
+    drive_parser.add_argument("--override-release-frames", type=int, default=24, help="Neutral frames after user override ends so the model does not fight back immediately.")
     drive_parser.add_argument("--transmission", choices=TRANSMISSION_MODES, help="Transmission mode to track while driving.")
     drive_parser.add_argument("--dry-run", action="store_true")
     drive_parser.add_argument("--no-ui", action="store_true")

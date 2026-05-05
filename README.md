@@ -90,6 +90,18 @@ forza-ai record --name open-road --vision-target desktop
 
 Screen indexes are sorted by desktop position: leftmost screens first, then top to bottom. `vision-screens` prints the exact detected index and bounds.
 
+While driving with vision enabled, the program also saves masked road-region screenshots every few seconds to `data/vision_samples/`. The Horizon profile detects only the configured road ROI in the forward view, matching the blue-lined road area from the setup screenshot and excluding the car body. Label the latest samples with the small road/dirt UI:
+
+```powershell
+forza-ai annotate-vision --session latest
+```
+
+Labels overwrite earlier labels for the same sample id and rebuild `data/vision_surface/calibration.json`, which the next run loads automatically. Disable screenshot sampling with:
+
+```powershell
+forza-ai drive --name open-road --no-vision-sampling
+```
+
 Record the transmission style with the run:
 
 ```powershell
@@ -129,7 +141,7 @@ The drive screen accepts commands while it runs:
 p pause | r resume | n neutral | s status | h help | q quit
 ```
 
-Human input override is on by default while driving. If you press `W/A/S/D`, arrow keys, `Space`, `Q`, `E`, or Shift, those controls override the model immediately and become the action used for online learning. If a physical controller/wheel input appears in telemetry and differs from what the program just sent, the program neutralizes its virtual controller output and learns from your telemetry input instead.
+Human input override is on by default while driving. If you press `W/A/S/D`, arrow keys, `Space`, `Q`, `E`, or Shift, those controls override the model immediately and become the action used for online learning. If a physical controller/wheel input appears in telemetry and differs from what the program just sent, the program neutralizes its virtual controller output and learns from your telemetry input instead. After you release the override, the virtual controller stays neutral briefly so the model does not immediately fight back.
 
 Disable override for pure AI-only runs:
 
@@ -141,7 +153,7 @@ Press `Ctrl+C` to stop. The driver sends neutral controls on exit.
 
 The dashboard shows the configured transmission mode and checks telemetry for gear/clutch behavior. Horizon telemetry does not expose the assist menu directly, so `--transmission` is the source of truth; clutch input is used as a sanity check for manual-with-clutch behavior.
 
-The dashboard also shows inferred terrain as `road`, `offroad`, `mixed`, or `unknown`. The inference uses wheel rumble, surface rumble, puddle depth, tire slip, speed, movement, and optional vision surface recognition. It also shows a separate `Vision surface` line so you can see what the screen/object detector actively sees apart from the telemetry-based terrain result. When vision is enabled, configured forward-view regions classify asphalt/road markings versus grass/dirt and add `vision_road_score`, `vision_offroad_score`, lane-marking offset, and related surface fields. Forward road and lane cues dampen nearby shoulder dirt so it is less likely to call a paved road offroad. Recordings include derived terrain metadata such as `terrain_state` and `terrain_confidence`.
+The dashboard also shows inferred terrain as `road`, `offroad`, `mixed`, or `unknown`. Telemetry-based off-road detection now uses speed-aware suspension spring travel only, so tire slip is no longer treated as an off-road signal. Slow-speed spring movement counts more because the car will not bounce as hard; high-speed travel needs a stronger signal so normal road bumps are less likely to be called offroad. It also shows a separate `Vision surface` line so you can see what the screen/object detector actively sees apart from the telemetry-based terrain result. When vision is enabled, the configured road ROI classifies asphalt/road markings versus grass/dirt and adds `vision_road_score`, `vision_offroad_score`, road-direction offset/heading, lane-marking offset, and related surface fields. Forward road and lane cues dampen nearby shoulder dirt so it is less likely to call a paved road offroad. Recordings include derived terrain metadata such as `terrain_state` and `terrain_confidence`.
 
 Test without sending controller input:
 
@@ -157,17 +169,21 @@ forza-ai drive --name open-road --no-train
 
 `--train` and the older `--self-train` flag still work, but they are no longer required.
 
+Exploration is also on by default. The learner uses curiosity-driven action bursts plus low-amplitude steering/throttle entropy so it keeps trying nearby choices instead of freezing into one behavior too early. `--no-explore` disables both the larger experiments and the small entropy layer.
+
 Reward and punishment tuning is read from JSON at drive startup. Horizon uses `configs/rewards/horizon.json` by default; Motorsport uses `configs/rewards/motorsport.json` when `configs/motorsport.toml` is selected. Override it for experiments with:
 
 ```powershell
 forza-ai drive --name open-road --reward-profile configs/rewards/horizon.json
 ```
 
-Self-training scores each action against the next telemetry frame. It rewards movement through the world, forward motion, speed gain, fast RPM climb through the useful band below redline, small high-speed bonuses, clean upshifts that stay below redline, and steady lane holding on road/racing runs. It strongly punishes holding throttle near or over redline, along with tire slip, lateral sliding, spinning, lane drift, driving-line error, throttle/brake conflict, wasted throttle that does not increase speed or movement, and stalled throttle. The online model is saved periodically and again when the drive loop exits.
+Self-training scores each action against the next telemetry frame. It rewards movement through the world, forward motion, speed gain, throttle that actually produces acceleration, fast RPM climb through the useful band below redline, small high-speed bonuses, clean upshifts that stay below redline, visual road-direction alignment, visible-road forward progress, and steady lane holding on road/racing runs. Horizon acceleration is intentionally weighted high so the car learns to commit to throttle when clear road is ahead. Penalties are capped to stay on a similar scale to rewards; road-mode offroad is still bad, but it no longer creates a 20-point punishment from a single frame. When the road ROI is clear ahead, crawling or braking without a strong brake signal is treated as timidity and the learned target is pushed toward more throttle. Launch throttle is not treated as wasted just because the car has not moved much yet. It strongly punishes holding throttle near or over redline, along with tire slip, lateral sliding, spinning, lane drift, driving-line error, throttle/brake conflict, wasted throttle at speed that does not increase speed or movement, stalled throttle, hard crash-like impacts, and reset prompts. The online model is saved periodically and again when the drive loop exits.
 
 Terrain preference changes self-training rewards: racing/road preference rewards clean road movement and heavily punishes off-road. In road mode, the off-road penalty is weighted higher than acceleration, progress, and speed rewards. Offroad preference rewards controlled off-road movement; mixed preference avoids strong terrain rewards or penalties.
 
 Road preference also disables wreckage-style skill chasing. If OCR sees wreckage/destruction skill text while road mode is active, the learner ignores the skill-score increase and applies a penalty instead.
+
+Crash detection uses sudden speed loss, high acceleration impact spikes, and OCR reset prompts. Crash events are recorded in the session log, and crash penalties cut throttle/add braking before the sample is learned.
 
 Learning also includes car identity and engine context from telemetry, including `car_ordinal`, max/idle RPM, cylinders, class, performance index, and drivetrain type, so separate cars can learn different behavior.
 
@@ -217,6 +233,7 @@ forza-ai drive --model models/imported.joblib
 - `forza_ai.learning`: online self-training and reward/punishment scoring.
 - `forza_ai.reward_config`: JSON reward profile loading for Horizon and Motorsport.
 - `forza_ai.vision`: optional screen capture, OCR, visual cue enrichment, and road/off-road surface recognition.
+- `forza_ai.vision_training`: periodic vision screenshots, manual road/dirt labels, and calibration rebuilds.
 - `forza_ai.paths`: name-based recording and model paths.
 - `forza_ai.terrain`: road/off-road inference, metadata, and terrain reward preferences.
 - `forza_ai.transmission`: configured transmission mode and clutch/gear telemetry checks.

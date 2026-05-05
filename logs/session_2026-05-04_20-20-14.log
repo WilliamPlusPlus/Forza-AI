@@ -1,0 +1,103 @@
+================================================================================
+  FORZA AI — SELF-TRAINING SESSION LOG
+  started  : 2026-05-04 20:20:14
+  online   : models\driving\fh5-driving-online.joblib
+  mode     : mixed  |  terrain: road  |  tx: manual
+  features : 160
+================================================================================
+
+VISION SAMPLES  dir=data\vision_samples\session_2026-05-04_20-20-14
+
+VISION SAMPLE  sample_id=20260504_202020_00000432_0001  frame=432  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202020_00000432_0001_roi.png
+
+VISION SAMPLE  sample_id=20260504_202023_00000676_0002  frame=676  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202023_00000676_0002_roi.png
+
+VISION SAMPLE  sample_id=20260504_202027_00000958_0003  frame=958  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202027_00000958_0003_roi.png
+
+VISION SAMPLE  sample_id=20260504_202032_00001308_0004  frame=1308  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202032_00001308_0004_roi.png
+
+VISION SAMPLE  sample_id=20260504_202039_00001801_0005  frame=1801  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202039_00001801_0005_roi.png
+
+VISION SAMPLE  sample_id=20260504_202042_00002053_0006  frame=2053  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202042_00002053_0006_roi.png
+
+VISION SAMPLE  sample_id=20260504_202045_00002271_0007  frame=2271  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202045_00002271_0007_roi.png
+
+VISION SAMPLE  sample_id=20260504_202052_00002758_0008  frame=2758  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202052_00002758_0008_roi.png
+
+VISION SAMPLE  sample_id=20260504_202058_00003173_0009  frame=3173  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202058_00003173_0009_roi.png
+
+VISION SAMPLE  sample_id=20260504_202105_00003676_0010  frame=3676  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202105_00003676_0010_roi.png
+
+VISION SAMPLE  sample_id=20260504_202111_00004127_0011  frame=4127  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202111_00004127_0011_roi.png
+
+VISION SAMPLE  sample_id=20260504_202115_00004389_0012  frame=4389  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202115_00004389_0012_roi.png
+
+VISION SAMPLE  sample_id=20260504_202118_00004621_0013  frame=4621  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202118_00004621_0013_roi.png
+
+VISION SAMPLE  sample_id=20260504_202123_00004951_0014  frame=4951  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202123_00004951_0014_roi.png
+
+VISION SAMPLE  sample_id=20260504_202126_00005221_0015  frame=5221  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202126_00005221_0015_roi.png
+
+VISION SAMPLE  sample_id=20260504_202131_00005578_0016  frame=5578  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202131_00005578_0016_roi.png
+[01:19]  frames 1–5700
+  reward    avg +0.0725   min -8.7768   max +1.0486
+  paths     steer +0.0188  speed -0.0680  terrain +0.1211  achievement +0.0033
+  speed     avg 3.7 mph
+  terrain   road 99% | offroad 0% | unknown 0%
+  explore   ε=0.0920  σ=0.1050
+  model     fitted  updates=39896
+
+
+VISION SAMPLE  sample_id=20260504_202137_00005971_0017  frame=5971  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202137_00005971_0017_roi.png
+[01:23]  frames 5701–6000
+  reward    avg +0.2383   min +0.1770   max +0.3350
+  paths     steer +0.0344  speed +0.0035  terrain +0.2000  achievement +0.0033
+  speed     avg 7.2 mph
+  terrain   road 100%
+  explore   ε=0.0909  σ=0.1044
+  model     fitted  updates=39956
+
+
+VISION SAMPLE  sample_id=20260504_202140_00006201_0018  frame=6201  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202140_00006201_0018_roi.png
+
+VISION SAMPLE  sample_id=20260504_202147_00006680_0019  frame=6680  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202147_00006680_0019_roi.png
+
+VISION SAMPLE  sample_id=20260504_202150_00006931_0020  frame=6931  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202150_00006931_0020_roi.png
+[01:40]  frames 6001–7200
+  reward    avg -0.4221   min -2.5883   max +0.7927
+  paths     steer +0.1894  speed -0.4845  terrain -0.1854  achievement -0.0548
+  speed     avg 5.9 mph
+  terrain   road 100%
+  explore   ε=0.0806  σ=0.0983
+  model     fitted  updates=40556
+  stuck     1 event(s) this interval
+
+
+VISION SAMPLE  sample_id=20260504_202155_00007313_0021  frame=7313  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202155_00007313_0021_roi.png
+[01:44]  frames 7201–7500
+  reward    avg +0.1251   min -3.6345   max +1.2404
+  paths     steer +0.3236  speed -0.2596  terrain -0.1093  achievement -0.0022
+  speed     avg 11.2 mph
+  terrain   road 100%
+  explore   ε=0.0800  σ=0.0963
+  model     fitted  updates=40769
+  stuck     1 event(s) this interval
+
+
+VISION SAMPLE  sample_id=20260504_202201_00007732_0022  frame=7732  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202201_00007732_0022_roi.png
+
+VISION SAMPLE  sample_id=20260504_202206_00008092_0023  frame=8092  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202206_00008092_0023_roi.png
+
+VISION SAMPLE  sample_id=20260504_202212_00008508_0024  frame=8508  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202212_00008508_0024_roi.png
+
+VISION SAMPLE  sample_id=20260504_202217_00008894_0025  frame=8894  roi=data\vision_samples\session_2026-05-04_20-20-14\images\20260504_202217_00008894_0025_roi.png
+[02:10]  frames 7501–9522
+  reward    avg +0.5363   min -0.6097   max +1.3531
+  paths     steer +0.3177  speed -0.1246  terrain +0.1976  achievement +0.0066
+  speed     avg 15.5 mph
+  terrain   road 100%
+  explore   ε=0.0800  σ=0.0928
+  model     fitted  updates=41134
+
+
+SESSION END  total_frames=9522  updates=41134  elapsed=00:02:10

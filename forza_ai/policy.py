@@ -35,6 +35,13 @@ FEATURES = [
     "vision_road_score", "vision_offroad_score", "vision_surface_confidence",
     "vision_surface_is_road", "vision_surface_is_offroad",
     "vision_lane_center_offset", "vision_lane_confidence", "vision_lane_visible",
+    "vision_road_center_offset", "vision_road_heading", "vision_road_direction_confidence",
+    "vision_road_roi_road_score", "vision_road_roi_offroad_score",
+    "vision_road_roi_grass_score", "vision_road_roi_dirt_score",
+    "vision_road_roi_asphalt_score", "vision_road_roi_lane_marking_score",
+    "vision_road_roi_lane_center_offset", "vision_road_roi_lane_confidence",
+    "vision_road_roi_lane_visible", "vision_road_roi_road_center_offset",
+    "vision_road_roi_road_heading", "vision_road_roi_is_road", "vision_road_roi_is_offroad",
     "vision_forward_surface_road_score", "vision_forward_surface_offroad_score",
     "vision_forward_surface_grass_score", "vision_forward_surface_dirt_score",
     "vision_forward_surface_asphalt_score", "vision_forward_surface_lane_marking_score",
@@ -135,8 +142,39 @@ class CautiousFallbackPolicy(DrivingPolicy):
     def predict(self, frame: TelemetryFrame) -> Controls:
         speed = float(frame.values.get("speed", 0.0) or 0.0)
         line = float(frame.values.get("normalized_driving_line", 0.0) or 0.0) / 127.0
+        road_offset = _feature_value(frame.values.get("vision_road_center_offset", 0.0))
+        road_heading = _feature_value(frame.values.get("vision_road_heading", 0.0))
+        road_confidence = max(
+            _feature_value(frame.values.get("vision_road_direction_confidence", 0.0)),
+            _feature_value(frame.values.get("vision_road_score", 0.0)),
+            _feature_value(frame.values.get("vision_road_roi_road_score", 0.0)),
+        )
+        offroad_confidence = max(
+            _feature_value(frame.values.get("vision_offroad_score", 0.0)),
+            _feature_value(frame.values.get("vision_road_roi_offroad_score", 0.0)),
+        )
         ai_brake = float(frame.values.get("normalized_ai_brake_difference", 0.0) or 0.0) / 127.0
         brake = min(0.65, max(0.0, ai_brake))
         # FH5 needs enough throttle to actually move and generate useful training data
-        throttle = 0.50 if speed < 35 and brake < 0.1 else 0.20
-        return Controls(steer=max(-0.55, min(0.55, -line * 0.55)), throttle=throttle, brake=brake)
+        road_clear = road_confidence >= 0.22 and road_confidence > offroad_confidence + 0.10
+        if road_clear and speed < 42 and brake < 0.55:
+            brake = min(brake, 0.04)
+        if brake >= 0.1:
+            throttle = 0.22
+        elif road_clear and speed < 20:
+            throttle = 0.95
+        elif road_clear and speed < 42:
+            throttle = 0.85
+        elif speed < 8:
+            throttle = 0.86
+        elif speed < 28:
+            throttle = 0.75
+        elif speed < 45:
+            throttle = 0.58
+        else:
+            throttle = 0.36
+        if road_confidence >= 0.18:
+            steer = road_offset * 0.35 + road_heading * 0.45
+        else:
+            steer = -line * 0.55
+        return Controls(steer=max(-0.55, min(0.55, steer)), throttle=throttle, brake=brake)
