@@ -17,6 +17,7 @@ from .telemetry import TelemetryReceiver, append_frame, is_driving_frame
 from .terrain import TERRAIN_PREFERENCES, enrich_terrain, resolve_terrain_preference
 from .trainer import train_model
 from .transmission import TRANSMISSION_MODES, ShiftAdvisor, normalize_transmission_mode
+from .vision import VisionWorker
 
 
 def record(args: argparse.Namespace) -> int:
@@ -31,6 +32,8 @@ def record(args: argparse.Namespace) -> int:
         config.telemetry.profile,
         config.telemetry.timeout_seconds,
     )
+    vision = VisionWorker()
+    vision.start()
     seen = 0
     saved = 0
     dashboard = TerminalDashboard(
@@ -53,6 +56,14 @@ def record(args: argparse.Namespace) -> int:
     redline_estimator = RedlineEstimator()
     try:
         for frame in receiver.frames(track):
+            vision_state = vision.get_state()
+            if vision_state.active:
+                frame.values.update({
+                    "vision_is_menu": int(vision_state.is_menu),
+                    "vision_skill_score": vision_state.skill_score,
+                    "vision_lane_offset": vision_state.lane_offset,
+                })
+
             redline_estimator.enrich(frame)
             enrich_terrain(frame, previous_frame)
             seen += 1
@@ -85,6 +96,8 @@ def record(args: argparse.Namespace) -> int:
         if args.no_ui:
             print(f"Stopped recording after {saved} frames.")
         return 0
+    finally:
+        vision.stop()
     dashboard.stop(f"Stopped recording after {saved} saved frames.")
     return 0
 
@@ -143,6 +156,8 @@ def drive(args: argparse.Namespace) -> int:
     shift_advisor = ShiftAdvisor(transmission_mode)
     controller_kind = "dry-run" if args.dry_run else config.drive.controller
     controller = create_controller(controller_kind)
+    vision = VisionWorker()
+    vision.start()
     dashboard = TerminalDashboard(
         DashboardState(
             mode="drive",
@@ -165,6 +180,14 @@ def drive(args: argparse.Namespace) -> int:
     previous_learning_controls = None
     try:
         for frame in receiver.frames(track):
+            vision_state = vision.get_state()
+            if vision_state.active:
+                frame.values.update({
+                    "vision_is_menu": int(vision_state.is_menu),
+                    "vision_skill_score": vision_state.skill_score,
+                    "vision_lane_offset": vision_state.lane_offset,
+                })
+
             redline_estimator.enrich(frame)
             enrich_terrain(frame, previous_frame)
             seen += 1
@@ -219,6 +242,7 @@ def drive(args: argparse.Namespace) -> int:
             print("Stopping and returning controller to neutral.")
     finally:
         controller.neutral()
+        vision.stop()
         if online_policy is not None and online_policy.updates:
             online_policy.save()
         dashboard.stop("Stopped; controller neutral")

@@ -43,6 +43,7 @@ class RewardBreakdown:
     stall_penalty: float = 0.0
     underrev_penalty: float = 0.0
     stuck_penalty: float = 0.0
+    menu_penalty: float = 0.0
 
     @property
     def total(self) -> float:
@@ -70,6 +71,7 @@ class RewardBreakdown:
             - self.stall_penalty
             - self.underrev_penalty
             - self.stuck_penalty
+            - self.menu_penalty
         )
         return raw if math.isfinite(raw) else 0.0
 
@@ -139,6 +141,7 @@ SCORE_FIELDS = (
     "horizon_skill_score",
     "horizon_skill_points",
     "horizon_skill_chain",
+    "vision_skill_score",
 )
 
 
@@ -375,6 +378,13 @@ def score_transition(
     terrain = infer_terrain(current, previous)
     terrain_bonus, terrain_penalty = terrain_reward(terrain, terrain_preference)
 
+    # Vision-based rewards
+    vision_menu = int(values.get("vision_is_menu", 0) or 0)
+    vision_lane = abs(float(values.get("vision_lane_offset", 0.0) or 0.0))
+    menu_penalty = 2.0 if vision_menu and (action.throttle > 0.1 or abs(action.steer) > 0.1) else 0.0
+    # Increase line penalty if vision also sees a lane deviation
+    vision_line_bonus = max(0.0, vision_lane - 0.20) * 0.50
+
     # Mode-specific drift logic
     # Drift mode: reward controlled oversteer, skip slip/slide/spin penalties
     # Road/racing: penalise drift-zone behaviour so the model never learns to drift
@@ -398,7 +408,7 @@ def score_transition(
         forward_motion_bonus=forward_motion_bonus(current),
         terrain_bonus=terrain_bonus,
         drift_bonus=active_drift_bonus,
-        line_penalty=max(0.0, line - line_thresh) * line_mult,
+        line_penalty=max(0.0, line - line_thresh) * line_mult + vision_line_bonus,
         slip_penalty=active_slip_penalty,
         lateral_slide_penalty=active_lateral_penalty,
         spin_penalty=active_spin_penalty,
@@ -409,6 +419,7 @@ def score_transition(
         wasted_throttle_penalty=0.40 if wasted_throttle else 0.0,
         stall_penalty=0.35 if stalled else 0.0,
         underrev_penalty=underrev_penalty(current, action),
+        menu_penalty=menu_penalty,
     )
 
 

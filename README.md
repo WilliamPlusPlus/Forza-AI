@@ -123,7 +123,7 @@ forza-ai drive --name open-road --self-train
 
 Self-training scores each action against the next telemetry frame. It rewards movement through the world, forward motion, speed gain, fast RPM climb through the useful band below redline, small high-speed bonuses, and clean upshifts that stay below redline. It strongly punishes holding throttle near or over redline, along with tire slip, lateral sliding, spinning, driving-line error, throttle/brake conflict, wasted throttle that does not increase speed or movement, and stalled throttle. The online model is saved periodically and again when the drive loop exits.
 
-Terrain preference changes self-training rewards: racing/road preference rewards clean road movement and heavily punishes off-road. In road mode, the off-road penalty is weighted higher than acceleration, progress, and speed rewards. Offroad preference rewards controlled off-road movement; mixed preference avoids strong terrain rewards or penalties.
+Terrain preference changes self-training rewards: racing/road preference rewards clean road movement and heavily punishes off-road. In road mode, the clean-road reward is multiplied when all four wheels are confidently on the road, while the off-road penalty is weighted higher than acceleration, progress, and speed rewards. Offroad preference rewards controlled off-road movement; mixed preference avoids strong terrain rewards or penalties.
 
 Learning also includes car identity and engine context from telemetry, including `car_ordinal`, max/idle RPM, cylinders, class, performance index, and drivetrain type, so separate cars can learn different behavior.
 

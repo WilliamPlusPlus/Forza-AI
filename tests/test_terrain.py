@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from forza_ai.telemetry import TelemetryFrame
-from forza_ai.terrain import enrich_terrain, infer_terrain, resolve_terrain_preference, terrain_reward
+from forza_ai.terrain import TerrainReading, enrich_terrain, infer_terrain, resolve_terrain_preference, terrain_reward
 
 
 def _frame(**values):
@@ -115,6 +115,17 @@ class TerrainTests(unittest.TestCase):
         self.assertEqual(road_penalty, 0.0)
         self.assertEqual(offroad_bonus, 0.0)
         self.assertGreaterEqual(offroad_penalty, 0.40)
+
+    def test_all_wheels_on_road_multiplier_increases_road_reward(self):
+        clean_road = TerrainReading("road", confidence=1.0, road_score=1.0, wheels_off=0)
+        partial_contact = TerrainReading("road", confidence=1.0, road_score=1.0, wheels_off=1)
+
+        clean_bonus, clean_penalty = terrain_reward(clean_road, "road")
+        partial_bonus, partial_penalty = terrain_reward(partial_contact, "road")
+
+        self.assertEqual(clean_penalty, 0.0)
+        self.assertEqual(partial_penalty, 0.0)
+        self.assertGreater(clean_bonus, partial_bonus)
 
 
 if __name__ == "__main__":

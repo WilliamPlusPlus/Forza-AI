@@ -42,6 +42,8 @@ _WHEEL_FIELDS = (
 
 # A single wheel is considered "off-road" when its score crosses this
 _WHEEL_OFFROAD_THRESHOLD = 0.10
+_ROAD_REWARD_BASE = 0.20
+_ALL_WHEELS_ON_ROAD_REWARD_MULTIPLIER = 2.0
 
 
 def _wheel_score(values: dict, rumble_f: str, surface_f: str,
@@ -119,7 +121,10 @@ def terrain_reward(reading: TerrainReading, preference: str) -> tuple[float, flo
         wheel_mult = 1.0
 
     if pref == "road":
-        reward = 0.20 * reading.confidence if reading.state == "road" else 0.0
+        reward = 0.0
+        if reading.state == "road":
+            reward_multiplier = _ALL_WHEELS_ON_ROAD_REWARD_MULTIPLIER if reading.wheels_off == 0 else 1.0
+            reward = _ROAD_REWARD_BASE * reading.confidence * reward_multiplier
         if reading.state == "offroad":
             # Base penalty 5.0–8.0 scaled by confidence; wheel_mult amplifies further
             base_penalty = max(5.0, 8.0 * reading.offroad_score)

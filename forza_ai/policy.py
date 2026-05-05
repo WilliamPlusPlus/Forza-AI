@@ -29,6 +29,7 @@ FEATURES = [
     "tire_wear_fl", "tire_wear_fr", "tire_wear_rl", "tire_wear_rr",
     "track_ordinal", "normalized_driving_line", "normalized_ai_brake_difference",
     "terrain_confidence", "terrain_offroad_score", "terrain_road_score", "terrain_is_road", "terrain_is_offroad",
+    "vision_is_menu", "vision_skill_score", "vision_lane_offset",
 ]
 
 
@@ -107,8 +108,17 @@ class CautiousFallbackPolicy(DrivingPolicy):
     def predict(self, frame: TelemetryFrame) -> Controls:
         speed = float(frame.values.get("speed", 0.0) or 0.0)
         line = float(frame.values.get("normalized_driving_line", 0.0) or 0.0) / 127.0
+        vision_lane = float(frame.values.get("vision_lane_offset", 0.0) or 0.0)
+        
+        # Combine telemetry line and vision lane
+        # Telemetry is usually more stable, but vision provides immediate road context
+        combined_steer = -line * 0.55
+        if abs(vision_lane) > 0.05:
+            # Add a correction based on visual lane detection
+            combined_steer += (-vision_lane * 0.35)
+            
         ai_brake = float(frame.values.get("normalized_ai_brake_difference", 0.0) or 0.0) / 127.0
         brake = min(0.65, max(0.0, ai_brake))
         # FH5 needs enough throttle to actually move and generate useful training data
         throttle = 0.50 if speed < 35 and brake < 0.1 else 0.20
-        return Controls(steer=max(-0.55, min(0.55, -line * 0.55)), throttle=throttle, brake=brake)
+        return Controls(steer=max(-0.75, min(0.75, combined_steer)), throttle=throttle, brake=brake)

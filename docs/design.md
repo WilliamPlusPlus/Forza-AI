@@ -49,7 +49,7 @@ The off-road threshold is intentionally sensitive to the live Horizon sample whe
 
 The online learner rewards movement through the world, forward motion, speed gain, fast RPM climb through the useful band below redline, small sustained high-speed bonuses, and clean upshifts that land below redline. Horizon can leave `distance_traveled` at zero, so movement falls back to position delta when needed.
 
-Terrain rewards are preference-based: road preference rewards clean road movement and heavily penalizes off-road with enough weight to beat acceleration/progress rewards; offroad preference rewards controlled off-road movement; mixed preference leaves terrain neutral while existing slip/stall penalties still apply.
+Terrain rewards are preference-based: road preference rewards clean road movement, multiplies the bonus when all four wheels are confidently on the road, and heavily penalizes off-road with enough weight to beat acceleration/progress rewards; offroad preference rewards controlled off-road movement; mixed preference leaves terrain neutral while existing slip/stall penalties still apply.
 
 It punishes signals that usually mean the car is being mishandled:
 
@@ -72,6 +72,10 @@ When skill score fields are available, positive score deltas become the stronges
 flowchart LR
     A["Forza Horizon Data Out"] --> B["UDP Receiver"]
     B --> C["Dash Packet Parser"]
+    I["Screen Capture (mss)"] --> J["Vision Worker (Thread)"]
+    J --> K["OCR (pytesseract) / CV (OpenCV)"]
+    K --> L["Vision State"]
+    L --> C
     C --> D["Driving Policy"]
     D --> E["Smoothing and Safety Clamp"]
     E --> F["Virtual Xbox Controller"]
@@ -82,9 +86,14 @@ flowchart LR
     G --> E
 ```
 
-## Why Telemetry First
+## Vision Integration
 
-Telemetry is the foundation because it is already numeric, stable, and high frequency. Vision can be added later as a helper for screen-only information such as menus, route prompts, reset prompts, or stuck detection. The driving policy should not start from OCR or pixels until the telemetry learner is already reliable.
+The vision pipeline runs in a background thread to avoid blocking the high-frequency telemetry and controller loops. It is designed to scale with high-refresh monitors (up to 144Hz and beyond) by sampling asynchronously.
+
+- **OCR Helper:** Uses `pytesseract` to detect pause menus, route prompts, and skill score gains.
+- **CV Helper:** Uses OpenCV (Canny/Hough) to identify road boundaries and provide a `vision_lane_offset` signal.
+- **Policy Augmentation:** The `CautiousFallbackPolicy` blends the visual lane offset with the telemetry-based driving line for more robust steering.
+- **Reward Enrichment:** The online learner treats detected skill score gains as a high-reward signal and penalizes driving inputs when a menu is detected.
 
 ## Safety
 
