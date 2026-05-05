@@ -152,7 +152,10 @@ class TelemetryReceiver:
             sock.bind((self.host, self.port))
             sock.settimeout(self.timeout_seconds)
             while True:
-                packet, _ = sock.recvfrom(2048)
+                try:
+                    packet, _ = sock.recvfrom(4096)
+                except ConnectionResetError:
+                    continue
                 try:
                     yield self.parser.parse(packet, track)
                 except (ValueError, struct.error):

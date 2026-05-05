@@ -381,18 +381,23 @@ def drive(args: argparse.Namespace) -> int:
                 if sample is not None and args.no_ui:
                     print(f"vision sample {sample['sample_id']} -> {sample['roi_path']}")
                 if online_policy is not None and previous_learning_frame is not None and previous_learning_controls is not None:
-                    reward = online_policy.learn(previous_learning_frame, frame, previous_learning_controls)
-                    if session_logger is not None:
-                        session_logger.record(
-                            frame_num=seen,
-                            reward=reward,
-                            policy=online_policy,
-                            speed_ms=float(frame.values.get("speed", 0.0) or 0.0),
-                            terrain_state=str(frame.values.get("terrain_state", "unknown")),
-                            override_active=expert_override_active(previous_learning_frame),
-                        )
-                    if args.no_ui and args.autosave_frames > 0 and online_policy.updates % args.autosave_frames == 0:
-                        print(f"learned {online_policy.updates} updates; last reward {reward.total:+.3f}")
+                    try:
+                        reward = online_policy.learn(previous_learning_frame, frame, previous_learning_controls)
+                    except Exception as exc:
+                        dashboard.update(message=f"Online learning error (skipped): {exc}")
+                        reward = None
+                    if reward is not None:
+                        if session_logger is not None:
+                            session_logger.record(
+                                frame_num=seen,
+                                reward=reward,
+                                policy=online_policy,
+                                speed_ms=float(frame.values.get("speed", 0.0) or 0.0),
+                                terrain_state=str(frame.values.get("terrain_state", "unknown")),
+                                override_active=expert_override_active(previous_learning_frame),
+                            )
+                        if args.no_ui and args.autosave_frames > 0 and online_policy.updates % args.autosave_frames == 0:
+                            print(f"learned {online_policy.updates} updates; last reward {reward.total:+.3f}")
                 override = _select_user_override(
                     args=args,
                     keyboard_reader=keyboard_reader,
@@ -600,6 +605,12 @@ def main(argv: list[str] | None = None) -> int:
         return args.func(args)
     except TimeoutError as exc:
         print(f"Timed out waiting for telemetry: {exc}", file=sys.stderr)
+        return 2
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"Network/IO error: {exc}", file=sys.stderr)
         return 2
 
 
