@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import sys
 import socket
 from pathlib import Path
@@ -18,6 +19,33 @@ from .terrain import TERRAIN_PREFERENCES, enrich_terrain, resolve_terrain_prefer
 from .trainer import train_model
 from .transmission import TRANSMISSION_MODES, ShiftAdvisor, normalize_transmission_mode
 from .vision import VisionWorker
+
+
+# ---------------------------------------------------------------------------
+# Keyboard override — hold arrow keys to correct the AI while it drives.
+# The AI learns from every correction frame fed through its reward signal.
+# ---------------------------------------------------------------------------
+_VK_LEFT  = 0x25
+_VK_RIGHT = 0x27
+_VK_UP    = 0x26
+_VK_DOWN  = 0x28
+
+
+def _key_held(vk: int) -> bool:
+    try:
+        return bool(ctypes.windll.user32.GetAsyncKeyState(vk) & 0x8000)
+    except Exception:
+        return False
+
+
+def _keyboard_override() -> Controls | None:
+    """Return controls from held arrow keys, or None when no key is pressed."""
+    steer    = (-1.0 if _key_held(_VK_LEFT) else 0.0) + (1.0 if _key_held(_VK_RIGHT) else 0.0)
+    throttle = 1.0 if _key_held(_VK_UP)   else 0.0
+    brake    = 1.0 if _key_held(_VK_DOWN)  else 0.0
+    if steer == 0.0 and throttle == 0.0 and brake == 0.0:
+        return None
+    return Controls(steer=max(-1.0, min(1.0, steer)), throttle=throttle, brake=brake).clipped()
 
 
 def record(args: argparse.Namespace) -> int:
@@ -184,6 +212,7 @@ def drive(args: argparse.Namespace) -> int:
             if vision_state.active:
                 frame.values.update({
                     "vision_is_menu": int(vision_state.is_menu),
+                    "vision_is_crashed": int(vision_state.is_crashed),
                     "vision_skill_score": vision_state.skill_score,
                     "vision_lane_offset": vision_state.lane_offset,
                 })
@@ -219,17 +248,27 @@ def drive(args: argparse.Namespace) -> int:
                         reward = None
                     if reward is not None and args.no_ui and args.autosave_frames > 0 and online_policy.updates % args.autosave_frames == 0:
                         print(f"self-trained {online_policy.updates} updates; last reward {reward.total:+.3f}")
-                controls = shift_advisor.apply(policy.predict(frame), frame)
+
+                # Check for keyboard correction (arrow keys).
+                # Override controls are stored as the learning target so the model
+                # sees the human's correction as the "right" action for that state.
+                override = _keyboard_override() if not args.dry_run else None
+                if override is not None:
+                    controls = override
+                    status_message = "USER OVERRIDE — learning from correction"
+                else:
+                    controls = shift_advisor.apply(policy.predict(frame), frame)
+                    status_message = None
+
                 controller.apply(controls)
-                reward_message = None
-                if online_policy is not None and online_policy.last_reward is not None:
-                    reward_message = (
+                if status_message is None and online_policy is not None and online_policy.last_reward is not None:
+                    status_message = (
                         f"Self-train updates {online_policy.updates}; "
                         f"reward {online_policy.last_reward.total:+.3f}"
                     )
-                dashboard.update(frame=frame, controls=controls, frames_seen=seen, message=reward_message)
+                dashboard.update(frame=frame, controls=controls, frames_seen=seen, message=status_message)
                 previous_learning_frame = frame
-                previous_learning_controls = controls
+                previous_learning_controls = controls  # correction controls become training targets
             else:
                 controller.neutral()
                 dashboard.update(frame=frame, controls=Controls(), frames_seen=seen, message="Waiting for Horizon driving telemetry")

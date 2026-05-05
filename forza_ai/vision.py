@@ -23,6 +23,7 @@ else:
 @dataclass
 class VisionState:
     is_menu: bool = False
+    is_crashed: bool = False
     skill_score: int = 0
     lane_offset: float = 0.0  # -1.0 (left) to 1.0 (right)
     last_update: float = 0.0
@@ -96,7 +97,27 @@ class VisionWorker(threading.Thread):
                     
                     # 3. Lane Detection (CV)
                     new_state.lane_offset = self._detect_lane_offset(img_bgr)
-                    
+
+                    # 4. Crash Detection — FH5 shows a red vignette on impact.
+                    # Sample the four screen corners; require at least 3 of 4 to
+                    # show strong red dominance before flagging as crashed.
+                    h, w = img_bgr.shape[:2]
+                    sz = max(60, h // 18)
+                    corners = [
+                        img_bgr[:sz, :sz],
+                        img_bgr[:sz, w - sz:],
+                        img_bgr[h - sz:, :sz],
+                        img_bgr[h - sz:, w - sz:],
+                    ]
+                    red_count = 0
+                    for corner in corners:
+                        b = float(np.mean(corner[:, :, 0]))
+                        g = float(np.mean(corner[:, :, 1]))
+                        r = float(np.mean(corner[:, :, 2]))
+                        if r > 90 and r > b * 2.2 and r > g * 2.2:
+                            red_count += 1
+                    new_state.is_crashed = red_count >= 3
+
                     # Thread-safe update
                     with self._lock:
                         self.state = new_state
@@ -109,45 +130,48 @@ class VisionWorker(threading.Thread):
         return img[roi["top"]:roi["top"]+roi["height"], roi["left"]:roi["left"]+roi["width"]]
 
     def _detect_lane_offset(self, img: np.ndarray) -> float:
-        # Crop to lane ROI
+        """Return signed lane offset: negative = car is left of centre, positive = right."""
         lane_roi = self._crop(img, self.roi_lane)
         gray = cv2.cvtColor(lane_roi, cv2.COLOR_BGR2GRAY)
         blur = cv2.GaussianBlur(gray, (5, 5), 0)
         edges = cv2.Canny(blur, 50, 150)
-        
-        # Simple lane detection using Hough Lines
-        lines = cv2.HoughLinesP(edges, 1, np.pi/180, 50, minLineLength=50, maxLineGap=10)
+
+        lines = cv2.HoughLinesP(edges, 1, np.pi / 180, 50, minLineLength=50, maxLineGap=10)
         if lines is None:
             return 0.0
-            
+
         mid_x = self.roi_lane["width"] / 2
-        left_lines = []
-        right_lines = []
-        
+        left_xs: list[float] = []
+        right_xs: list[float] = []
+
         for line in lines:
             for x1, y1, x2, y2 in line:
-                if x1 == x2: continue
+                if x1 == x2:
+                    continue
                 slope = (y2 - y1) / (x2 - x1)
-                # Filter by slope to find lanes (avoid horizontal/vertical noise)
-                if 0.3 < abs(slope) < 2.0:
-                    if slope < 0:
-                        left_lines.append((x1 + x2) / 2)
-                    else:
-                        right_lines.append((x1 + x2) / 2)
-        
-        # Calculate offset from center
-        if not left_lines and not right_lines:
+                if not (0.3 < abs(slope) < 2.5):
+                    continue
+                cx = (x1 + x2) / 2.0
+                # Lines whose midpoint is left of centre and slope negative = left lane mark
+                if cx < mid_x and slope < 0:
+                    left_xs.append(cx)
+                elif cx >= mid_x and slope > 0:
+                    right_xs.append(cx)
+
+        if not left_xs and not right_xs:
             return 0.0
-            
-        current_center = mid_x
-        if left_lines and right_lines:
-            current_center = (np.mean(left_lines) + np.mean(right_lines)) / 2
-        elif left_lines:
-            current_center = np.mean(left_lines) + (mid_x * 0.4) # Guessing based on ROI
-        elif right_lines:
-            current_center = np.mean(right_lines) - (mid_x * 0.4)
-            
-        offset = (current_center - mid_x) / mid_x
+
+        if left_xs and right_xs:
+            lane_centre = (float(np.mean(left_xs)) + float(np.mean(right_xs))) / 2.0
+        elif left_xs:
+            # Only left marking visible — car may be drifting right
+            lane_centre = float(np.mean(left_xs)) + mid_x * 0.45
+        else:
+            # Only right marking visible — car may be drifting left
+            lane_centre = float(np.mean(right_xs)) - mid_x * 0.45
+
+        # Positive offset = car is right of lane centre; negative = left of centre
+        offset = (lane_centre - mid_x) / mid_x
         return float(np.clip(offset, -1.0, 1.0))
 
     def get_state(self) -> VisionState:

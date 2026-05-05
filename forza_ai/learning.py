@@ -44,6 +44,7 @@ class RewardBreakdown:
     underrev_penalty: float = 0.0
     stuck_penalty: float = 0.0
     menu_penalty: float = 0.0
+    crash_penalty: float = 0.0
 
     @property
     def total(self) -> float:
@@ -72,6 +73,7 @@ class RewardBreakdown:
             - self.underrev_penalty
             - self.stuck_penalty
             - self.menu_penalty
+            - self.crash_penalty
         )
         return raw if math.isfinite(raw) else 0.0
 
@@ -270,6 +272,31 @@ def spin_penalty(current: TelemetryFrame) -> float:
     return min(0.80, max(0.0, yaw_rate - 1.20) * 0.35 + max(0.0, roll_rate - 0.85) * 0.22)
 
 
+def _crash_penalty(previous: TelemetryFrame, current: TelemetryFrame, action: Controls) -> float:
+    """Detect wall/barrier impacts from sudden deceleration or G-force spikes."""
+    prev_speed = _fv(previous.values.get("speed"))
+    speed = _fv(current.values.get("speed"))
+
+    # Sudden speed loss without intentional braking = wall impact.
+    # 4 m/s drop (~9 mph) in one frame without brake input is unambiguous.
+    speed_drop = prev_speed - speed
+    if speed_drop > 4.0 and action.brake < 0.35 and prev_speed > 4.0:
+        return min(10.0, speed_drop * 1.5)
+
+    # G-force spike from acceleration sensors (m/s²).
+    # Normal hard cornering peaks at ~20-30; wall impacts reach 50-150+.
+    ax = abs(_fv(current.values.get("acceleration_x")))
+    az = abs(_fv(current.values.get("acceleration_z")))
+    if max(ax, az) > 45.0:
+        return min(8.0, (max(ax, az) - 45.0) * 0.16)
+
+    # Vision crash signal: red vignette detected by VisionWorker.
+    if int(current.values.get("vision_is_crashed", 0) or 0):
+        return 5.0
+
+    return 0.0
+
+
 def _fv(value: object) -> float:
     """Safe telemetry float: returns 0.0 for None, nan, inf, or non-numeric."""
     try:
@@ -380,10 +407,20 @@ def score_transition(
 
     # Vision-based rewards
     vision_menu = int(values.get("vision_is_menu", 0) or 0)
-    vision_lane = abs(float(values.get("vision_lane_offset", 0.0) or 0.0))
+    vision_lane = float(values.get("vision_lane_offset", 0.0) or 0.0)  # signed: negative=left of centre
+    vision_lane_abs = abs(vision_lane)
     menu_penalty = 2.0 if vision_menu and (action.throttle > 0.1 or abs(action.steer) > 0.1) else 0.0
-    # Increase line penalty if vision also sees a lane deviation
-    vision_line_bonus = max(0.0, vision_lane - 0.20) * 0.50
+
+    # Lane-keeping penalty: scales with how far off-centre the car is.
+    # Also add a steer-correction bonus when the model is already steering back.
+    vision_lane_penalty = max(0.0, vision_lane_abs - 0.15) * 0.80
+    # Reward steering toward centre: steer sign should oppose lane offset sign.
+    vision_lane_correction = 0.0
+    if vision_lane_abs > 0.20 and action.steer * (-vision_lane) > 0.05:
+        vision_lane_correction = min(0.25, vision_lane_abs * 0.30)
+
+    # Legacy telemetry line penalty augmented by vision
+    vision_line_bonus = max(0.0, vision_lane_abs - 0.20) * 0.50
 
     # Mode-specific drift logic
     # Drift mode: reward controlled oversteer, skip slip/slide/spin penalties
@@ -405,10 +442,10 @@ def score_transition(
         shift_bonus=clean_shift_bonus(previous, current),
         downshift_bonus=clean_downshift_bonus(previous, current),
         rpm_climb_bonus=rpm_climb_bonus(previous, current, action),
-        forward_motion_bonus=forward_motion_bonus(current),
+        forward_motion_bonus=forward_motion_bonus(current) + vision_lane_correction,
         terrain_bonus=terrain_bonus,
         drift_bonus=active_drift_bonus,
-        line_penalty=max(0.0, line - line_thresh) * line_mult + vision_line_bonus,
+        line_penalty=max(0.0, line - line_thresh) * line_mult + vision_line_bonus + vision_lane_penalty,
         slip_penalty=active_slip_penalty,
         lateral_slide_penalty=active_lateral_penalty,
         spin_penalty=active_spin_penalty,
@@ -420,6 +457,7 @@ def score_transition(
         stall_penalty=0.35 if stalled else 0.0,
         underrev_penalty=underrev_penalty(current, action),
         menu_penalty=menu_penalty,
+        crash_penalty=_crash_penalty(previous, current, action),
     )
 
 
