@@ -581,7 +581,10 @@ class OnlineDrivingPolicy(DrivingPolicy):
         )
 
     def _load(self) -> None:
-        bundle = joblib.load(self.model_path)
+        try:
+            bundle = joblib.load(self.model_path)
+        except Exception:
+            return
         if bundle.get("kind") != "online_sgd":
             return
         self.scaler = bundle["scaler"]

@@ -152,8 +152,14 @@ class TelemetryReceiver:
             sock.bind((self.host, self.port))
             sock.settimeout(self.timeout_seconds)
             while True:
-                packet, _ = sock.recvfrom(2048)
-                yield self.parser.parse(packet, track)
+                try:
+                    packet, _ = sock.recvfrom(4096)
+                except ConnectionResetError:
+                    continue
+                try:
+                    yield self.parser.parse(packet, track)
+                except (struct.error, ValueError):
+                    pass
 
 
 def append_frame(path: str | Path, frame: TelemetryFrame) -> None:

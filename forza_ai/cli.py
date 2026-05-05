@@ -212,8 +212,12 @@ def drive(args: argparse.Namespace) -> int:
                 continue
             if is_driving_frame(frame):
                 if online_policy is not None and previous_learning_frame is not None and previous_learning_controls is not None:
-                    reward = online_policy.learn(previous_learning_frame, frame, previous_learning_controls)
-                    if args.no_ui and args.autosave_frames > 0 and online_policy.updates % args.autosave_frames == 0:
+                    try:
+                        reward = online_policy.learn(previous_learning_frame, frame, previous_learning_controls)
+                    except Exception as exc:
+                        dashboard.update(message=f"Online learning error (skipped): {exc}")
+                        reward = None
+                    if reward is not None and args.no_ui and args.autosave_frames > 0 and online_policy.updates % args.autosave_frames == 0:
                         print(f"self-trained {online_policy.updates} updates; last reward {reward.total:+.3f}")
                 controls = shift_advisor.apply(policy.predict(frame), frame)
                 controller.apply(controls)
@@ -304,6 +308,12 @@ def main(argv: list[str] | None = None) -> int:
         return args.func(args)
     except TimeoutError as exc:
         print(f"Timed out waiting for telemetry: {exc}", file=sys.stderr)
+        return 2
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"Network/IO error: {exc}", file=sys.stderr)
         return 2
 
 

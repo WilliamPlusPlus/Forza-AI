@@ -48,21 +48,19 @@ class VisionWorker(threading.Thread):
             return
 
         with mss.mss() as sct:
-            # Monitor 1 by default
-            monitor = sct.monitors[1]
+            monitors = sct.monitors
+            monitor = monitors[1] if len(monitors) > 1 else monitors[0]
             last_frame_time = 0
-            
+
             while not self.stop_event.is_set():
                 now = time.time()
                 dt = now - last_frame_time
                 if dt < (1.0 / self.fps_limit):
                     time.sleep(0.001)
                     continue
-                
+
                 last_frame_time = now
-                
-                # Full screen capture for CV/OCR
-                # mss is fast, but we'll crop ROIs for processing
+
                 try:
                     # Capture once, then crop from memory
                     screenshot = sct.grab(monitor)
