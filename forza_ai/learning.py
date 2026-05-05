@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import math
+import warnings
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -10,6 +12,18 @@ import joblib
 import numpy as np
 from sklearn.linear_model import SGDRegressor
 from sklearn.preprocessing import StandardScaler
+
+# Suppress the divide-by-zero RuntimeWarning from StandardScaler when a feature
+# has zero variance (only one distinct value seen so far).  The _fix_scaler_scale
+# helper replaces those zeros with 1.0 before every transform call, so the NaN
+# output never reaches the models — this filter just silences the transient
+# warning that fires during sklearn's internal divide before we can intercept it.
+warnings.filterwarnings(
+    "ignore",
+    message="invalid value encountered in divide",
+    category=RuntimeWarning,
+    module="sklearn",
+)
 
 from .controller import Controls
 from .policy import DrivingPolicy, FEATURES, frame_features
@@ -101,28 +115,32 @@ def resolve_driving_mode(model_type: str, mode: str = "auto") -> str:
 # These are deliberately extreme so the model experiences situations it would
 # never reach via Gaussian noise alone.
 # ---------------------------------------------------------------------------
-_EXPLORE_HOLD_FRAMES = 14   # ~230 ms at 60 Hz — enough to observe the effect
+_EXPLORE_HOLD_FRAMES = 8    # ~130 ms at 60 Hz — enough to observe without going far off-road
+
+# Speed thresholds (m/s) above which extreme steering exploration is suppressed
+_EXPLORE_SPEED_GATE_CORNER = 15.0   # ~34 mph — no full-lock steering above this
+_EXPLORE_SPEED_GATE_SLIP   = 20.0   # ~45 mph — no slip-inducing actions above this
 
 _EXPLORE_ACTIONS_SPEED = [          # target high-speed state buckets
     (0.0,  1.0, 0.0),
-    (0.15, 1.0, 0.0),
-    (-0.15, 1.0, 0.0),
+    (0.10, 1.0, 0.0),
+    (-0.10, 1.0, 0.0),
 ]
-_EXPLORE_ACTIONS_CORNER = [         # target high-yaw state buckets
-    (0.80,  0.70, 0.0),
-    (-0.80, 0.70, 0.0),
-    (1.0,   0.50, 0.0),
-    (-1.0,  0.50, 0.0),
+_EXPLORE_ACTIONS_CORNER = [         # target high-yaw state buckets (moderate angles)
+    (0.55,  0.65, 0.0),
+    (-0.55, 0.65, 0.0),
+    (0.75,  0.45, 0.0),
+    (-0.75, 0.45, 0.0),
 ]
 _EXPLORE_ACTIONS_BRAKE = [          # target braking / low-speed buckets
     (0.0,  0.0, 0.80),
-    (0.25, 0.0, 0.60),
-    (-0.25, 0.0, 0.60),
+    (0.20, 0.0, 0.60),
+    (-0.20, 0.0, 0.60),
 ]
 _EXPLORE_ACTIONS_SLIP = [           # target high-slip state buckets
-    (0.60,  0.90, 0.0),
-    (-0.60, 0.90, 0.0),
-    (0.40,  1.0,  0.0),
+    (0.45,  0.85, 0.0),
+    (-0.45, 0.85, 0.0),
+    (0.30,  0.95, 0.0),
 ]
 _EXPLORE_ACTIONS_ALL = (
     _EXPLORE_ACTIONS_SPEED
@@ -216,17 +234,17 @@ def underrev_penalty(current: TelemetryFrame, action: Controls) -> float:
 
 
 def redline_penalty(current: TelemetryFrame, action: Controls) -> float:
+    """Penalise only when RPM hits the actual redline — no penalty below it."""
     engine_max = effective_redline_rpm(current)
     rpm = float(current.values.get("current_engine_rpm", 0.0) or 0.0)
-    if engine_max <= 0.0:
+    if engine_max <= 0.0 or rpm <= 0.0:
         return 0.0
     ratio = rpm / engine_max
-    if ratio <= 0.94:
+    # Only penalise at or above the true redline — allow the full RPM range freely
+    if ratio < 1.0:
         return 0.0
-    near_redline = max(0.0, ratio - 0.94) * 2.5
-    over_redline = max(0.0, ratio - 1.0) * 5.0
-    throttle_pressure = action.throttle * 0.35
-    return min(1.20, near_redline + over_redline + throttle_pressure)
+    over_redline = (ratio - 1.0) * 8.0
+    return min(2.0, over_redline)
 
 
 def rpm_climb_bonus(previous: TelemetryFrame, current: TelemetryFrame, action: Controls) -> float:
@@ -392,8 +410,9 @@ def score_transition(
 
     distance_delta = max(-1.0, min(8.0, movement_delta(previous, current)))
     speed_delta = max(-10.0, min(10.0, speed - prev_speed))
-    # FH5 rewards high speed; old cap of 0.22 killed incentive above 82 mph
-    speed_bonus = min(0.50, max(0.0, speed) * 0.008)
+    # Reward speed with no upper cap — faster is always better
+    # 0.006 per m/s means ~0.54 at 90 mph, ~0.75 at 125 mph, etc.
+    speed_bonus = max(0.0, speed) * 0.006
     brake_conflict = min(action.throttle, action.brake) + action.throttle * ai_brake
     wasted_throttle = action.throttle > 0.35 and speed_delta < 0.15 and distance_delta < 0.20
     stalled = action.throttle > 0.35 and speed < 1.0
@@ -407,9 +426,14 @@ def score_transition(
 
     # Vision-based rewards
     vision_menu = int(values.get("vision_is_menu", 0) or 0)
+    vision_offroad = int(values.get("vision_is_offroad", 0) or 0)
     vision_lane = float(values.get("vision_lane_offset", 0.0) or 0.0)  # signed: negative=left of centre
     vision_lane_abs = abs(vision_lane)
     menu_penalty = 2.0 if vision_menu and (action.throttle > 0.1 or abs(action.steer) > 0.1) else 0.0
+    # Vision offroad: immediate penalty the moment the surface looks like grass/dirt.
+    # Stacks on top of telemetry terrain penalty for faster response.
+    if vision_offroad:
+        terrain_penalty = max(terrain_penalty, 5.0)
 
     # Lane-keeping penalty: scales with how far off-centre the car is.
     # Also add a steer-correction bonus when the model is already steering back.
@@ -435,7 +459,7 @@ def score_transition(
     active_spin_penalty = 0.0 if is_drift_mode else spin_penalty(current)
 
     return RewardBreakdown(
-        score_gain=max(0.0, score_delta) * 0.01 * max(0.0, score_weight),
+        score_gain=0.0,  # skill score rewards removed — speed/progress are the only progress signals
         progress=distance_delta * 0.35,
         speed_gain=speed_delta * 0.03,
         speed_bonus=speed_bonus,
@@ -500,13 +524,13 @@ class OnlineDrivingPolicy(DrivingPolicy):
     driving_mode: str = "mixed"
     # Epsilon-greedy: probability of replacing policy output with a directed
     # exploration action held for _EXPLORE_HOLD_FRAMES frames
-    epsilon: float = 0.15
-    epsilon_decay: float = 0.9998
-    epsilon_min: float = 0.05
+    epsilon: float = 0.08
+    epsilon_decay: float = 0.9997
+    epsilon_min: float = 0.02
     # Gaussian noise layered on top of the policy output between episodes
-    exploration_std: float = 0.18
-    exploration_decay: float = 0.9999
-    min_exploration_std: float = 0.04
+    exploration_std: float = 0.10
+    exploration_decay: float = 0.9998
+    min_exploration_std: float = 0.02
     # Curiosity: intrinsic bonus for visiting novel (speed, yaw, slip) states
     curiosity_weight: float = 0.30
     scaler: StandardScaler = field(default_factory=StandardScaler)
@@ -519,6 +543,8 @@ class OnlineDrivingPolicy(DrivingPolicy):
     _explore_action: tuple | None = field(default=None, init=False, repr=False)
     _explore_frames_left: int = field(default=0, init=False, repr=False)
     _stuck_frames: int = field(default=0, init=False, repr=False)
+    # Rolling buffer of recent speeds for sudden-stop detection (~1 second at 60 Hz)
+    _recent_speeds: deque = field(default_factory=lambda: deque(maxlen=70), init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.model_path = Path(self.model_path)
@@ -535,6 +561,7 @@ class OnlineDrivingPolicy(DrivingPolicy):
         if not self.fitted:
             blended = base_controls
         else:
+            _fix_scaler_scale(self.scaler)  # ensure no zero-variance columns before transform
             x_scaled = np.clip(np.nan_to_num(self.scaler.transform(frame_features(frame, self.features).reshape(1, -1)), nan=0.0, posinf=0.0, neginf=0.0), -10.0, 10.0)
             pred = np.array([model.predict(x_scaled)[0] for model in self.models], dtype=np.float32)
             online = Controls(float(pred[0]), float(pred[1]), float(pred[2]), float(pred[3])).clipped()
@@ -560,6 +587,14 @@ class OnlineDrivingPolicy(DrivingPolicy):
             self._explore_action = self._curiosity_directed_action()
             self._explore_frames_left = _EXPLORE_HOLD_FRAMES - 1
             s, t, b = self._explore_action
+            # Speed gate: suppress extreme steering exploration at high speed
+            # to avoid immediately driving off-road on straights and fast corners.
+            speed = float(frame.values.get("speed", 0.0) or 0.0)
+            is_corner_action = abs(s) >= 0.50
+            is_slip_action = t >= 0.85 and abs(s) >= 0.30
+            if (is_corner_action and speed > _EXPLORE_SPEED_GATE_CORNER) or \
+               (is_slip_action and speed > _EXPLORE_SPEED_GATE_SLIP):
+                return blended  # skip this exploration burst; stay on road
             return Controls(steer=s, throttle=t, brake=b,
                             handbrake=blended.handbrake).clipped()
 
@@ -581,14 +616,20 @@ class OnlineDrivingPolicy(DrivingPolicy):
         reward = score_transition(previous, current, action, self.score_weight, self.terrain_preference, self.driving_mode)
         reward.curiosity_bonus = self._curiosity_bonus(current)
         reward.stuck_penalty = self._update_stuck(current, action)
+        # Fold sudden-stop penalty into crash_penalty so it shows in the dashboard
+        reward.crash_penalty = max(reward.crash_penalty, self._sudden_stop_penalty(current, action))
         target = reward_adjusted_target(action, reward)
-        x = frame_features(previous, self.features).reshape(1, -1)
+
+        # Sanitise features before touching the scaler — NaN/inf in telemetry
+        # corrupt partial_fit statistics and make every subsequent transform produce NaN.
+        x_raw = frame_features(previous, self.features).reshape(1, -1)
+        x = np.nan_to_num(x_raw, nan=0.0, posinf=0.0, neginf=0.0)
         y = np.array([target.steer, target.throttle, target.brake, target.handbrake], dtype=np.float32)
         sample_weight = np.array([self._sample_weight(reward)], dtype=np.float32)
 
         self.scaler.partial_fit(x)
         _fix_scaler_scale(self.scaler)
-        x_scaled = np.clip(self.scaler.transform(x), -10.0, 10.0)
+        x_scaled = np.clip(np.nan_to_num(self.scaler.transform(x), nan=0.0, posinf=0.0, neginf=0.0), -10.0, 10.0)
         for index, model in enumerate(self.models):
             model.partial_fit(x_scaled, [float(y[index])], sample_weight=sample_weight)
         self.fitted = True
@@ -676,6 +717,35 @@ class OnlineDrivingPolicy(DrivingPolicy):
             return 0.0
         # Ramps from 0 → 2.0 over the 30 frames after grace period
         return min(2.0, (self._stuck_frames - grace) * 0.067)
+
+    def _sudden_stop_penalty(self, current: TelemetryFrame, action: Controls) -> float:
+        """Penalise going from >15 m/s to near-zero in under one second.
+
+        Maintains a ~1-second rolling buffer of speeds (maxlen=70 at ~60 Hz).
+        If the car is now essentially stopped but was above 15 m/s at any point
+        in the last second AND the driver wasn't intentionally braking hard,
+        it's almost certainly a wall impact — apply a large penalty.
+
+        15 m/s ≈ 33 mph.  Intentional hard braking is allowed (brake > 0.55).
+        """
+        speed = _fv(current.values.get("speed"))
+        self._recent_speeds.append(speed)
+
+        # Not stopped — nothing to penalise
+        if speed > 2.0:
+            return 0.0
+
+        # Intentional hard braking — driver chose to stop, not a crash
+        if action.brake > 0.55:
+            return 0.0
+
+        # Was the car moving fast within the last second?
+        recent_max = max(self._recent_speeds) if self._recent_speeds else 0.0
+        if recent_max > 15.0:
+            # Scale penalty with how fast it was going — harder impact = bigger penalty
+            return min(12.0, recent_max * 0.55)
+
+        return 0.0
 
     def _curiosity_bonus(self, frame: TelemetryFrame) -> float:
         key = self._state_key(frame)

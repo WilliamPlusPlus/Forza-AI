@@ -226,14 +226,19 @@ class TerminalDashboard:
         if v is None:
             return "Vision: not started"
         if not v.active:
-            return "Vision: inactive (install opencv-python mss pytesseract)"
+            if v.error:
+                return f"Vision: inactive — {v.error}"
+            return "Vision: inactive (starting…)"
         flags = []
         if v.is_menu:
             flags.append("MENU")
         if v.is_crashed:
             flags.append("CRASHED")
+        if v.is_offroad:
+            flags.append("OFFROAD")
         flag_str = " | ".join(flags) if flags else "ok"
-        return f"Vision: active | lane {v.lane_offset:+.2f} | score {v.skill_score} | {flag_str}"
+        res = f"{v.monitor_w}x{v.monitor_h}" if v.monitor_w else "?"
+        return f"Vision: monitor {v.monitor_index} ({res}) | lane {v.lane_offset:+.2f} | score {v.skill_score} | {flag_str}"
 
     def _status_message(self) -> str:
         frame = self.state.last_frame

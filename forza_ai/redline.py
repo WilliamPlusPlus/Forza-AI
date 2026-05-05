@@ -37,13 +37,19 @@ class RedlineEstimator:
         return frame
 
 
+_DEFAULT_REDLINE_RPM = 9500.0  # Conservative fallback when telemetry hasn't reported yet
+
+
 def effective_redline_rpm(frame: TelemetryFrame) -> float:
     learned = _float(frame.values.get("learned_redline_rpm"))
     confidence = _float(frame.values.get("learned_redline_confidence"))
     engine_max = _float(frame.values.get("engine_max_rpm"))
     if learned > 0.0 and confidence >= 0.35:
         return learned
-    return engine_max
+    if engine_max > 0.0:
+        return engine_max
+    # Fall back to a sensible default so the penalty fires from the first frame
+    return _DEFAULT_REDLINE_RPM
 
 
 def _learned_redline(state: RedlineState, engine_max: float) -> float:

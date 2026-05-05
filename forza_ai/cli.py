@@ -19,6 +19,7 @@ from .terrain import TERRAIN_PREFERENCES, enrich_terrain, resolve_terrain_prefer
 from .trainer import train_model
 from .transmission import TRANSMISSION_MODES, ShiftAdvisor, normalize_transmission_mode
 from .vision import VisionWorker
+from .vision_sampler import VisionSampler, annotate_samples
 
 
 # ---------------------------------------------------------------------------
@@ -60,8 +61,11 @@ def record(args: argparse.Namespace) -> int:
         config.telemetry.profile,
         config.telemetry.timeout_seconds,
     )
-    vision = VisionWorker()
+    vision = VisionWorker(monitor_index=getattr(args, "monitor", None))
     vision.start()
+    sampler = VisionSampler(vision, enabled=not getattr(args, "no_vision_samples", False))
+    if sampler.session_dir:
+        print(f"Vision samples → {sampler.session_dir}")
     seen = 0
     saved = 0
     dashboard = TerminalDashboard(
@@ -112,6 +116,7 @@ def record(args: argparse.Namespace) -> int:
                 track_ordinal = frame.values.get("track_ordinal")
                 suffix = f", track_ordinal={track_ordinal}" if track_ordinal is not None else ""
                 print(f"recorded {saved} frames{suffix}")
+            sampler.maybe_capture(frame, seen)
             if args.limit and saved >= args.limit:
                 break
             previous_frame = frame
@@ -169,10 +174,10 @@ def drive(args: argparse.Namespace) -> int:
             terrain_preference=terrain_preference,
             driving_mode=driving_mode,
             # Flatten both exploration knobs to minimum when disabled
-            epsilon=0.15 if explore else 0.0,
-            epsilon_min=0.05 if explore else 0.0,
-            exploration_std=0.18 if explore else 0.0,
-            min_exploration_std=0.04 if explore else 0.0,
+            epsilon=0.08 if explore else 0.0,
+            epsilon_min=0.02 if explore else 0.0,
+            exploration_std=0.10 if explore else 0.0,
+            min_exploration_std=0.02 if explore else 0.0,
         )
         base = online_policy
     policy = SmoothPolicy(
@@ -184,8 +189,11 @@ def drive(args: argparse.Namespace) -> int:
     shift_advisor = ShiftAdvisor(transmission_mode)
     controller_kind = "dry-run" if args.dry_run else config.drive.controller
     controller = create_controller(controller_kind)
-    vision = VisionWorker()
+    vision = VisionWorker(monitor_index=getattr(args, "monitor", None))
     vision.start()
+    sampler = VisionSampler(vision, enabled=not getattr(args, "no_vision_samples", False))
+    if sampler.session_dir:
+        print(f"Vision samples → {sampler.session_dir}")
     dashboard = TerminalDashboard(
         DashboardState(
             mode="drive",
@@ -213,6 +221,7 @@ def drive(args: argparse.Namespace) -> int:
                 frame.values.update({
                     "vision_is_menu": int(vision_state.is_menu),
                     "vision_is_crashed": int(vision_state.is_crashed),
+                    "vision_is_offroad": int(vision_state.is_offroad),
                     "vision_skill_score": vision_state.skill_score,
                     "vision_lane_offset": vision_state.lane_offset,
                 })
@@ -274,6 +283,7 @@ def drive(args: argparse.Namespace) -> int:
                 dashboard.update(frame=frame, controls=Controls(), frames_seen=seen, message="Waiting for Horizon driving telemetry", vision=vision_state)
                 previous_learning_frame = None
                 previous_learning_controls = None
+            sampler.maybe_capture(frame, seen)
             previous_frame = frame
     except socket.timeout:
         controller.neutral()
@@ -306,6 +316,7 @@ def build_parser() -> argparse.ArgumentParser:
     record_parser.add_argument("--transmission", choices=TRANSMISSION_MODES, help="Transmission mode used for this recording.")
     record_parser.add_argument("--limit", type=int)
     record_parser.add_argument("--no-ui", action="store_true")
+    record_parser.add_argument("--monitor", type=int, default=None, help="Monitor index for vision capture: 1=primary (default), 2=second screen, 0=all monitors combined.")
     record_parser.set_defaults(func=record)
 
     train_parser = sub.add_parser("train", help="Train a driving model from recorded telemetry.")
@@ -336,7 +347,18 @@ def build_parser() -> argparse.ArgumentParser:
     drive_parser.add_argument("--transmission", choices=TRANSMISSION_MODES, help="Transmission mode to track while driving.")
     drive_parser.add_argument("--dry-run", action="store_true")
     drive_parser.add_argument("--no-ui", action="store_true")
+    drive_parser.add_argument("--monitor", type=int, default=None, help="Monitor index for vision capture: 1=primary (default), 2=second screen, 0=all monitors combined.")
+    drive_parser.add_argument("--no-vision-samples", action="store_true", help="Disable automatic vision screenshot saving.")
     drive_parser.set_defaults(func=drive)
+
+    record_parser.add_argument("--no-vision-samples", action="store_true", help="Disable automatic vision screenshot saving.")
+
+    annotate_parser = sub.add_parser("annotate", help="Open the vision sample audit UI to review and label saved screenshots.")
+    annotate_parser.add_argument("session", nargs="?", default=None, help="Session folder or 'latest'. Defaults to most recent session.")
+    annotate_parser.add_argument("--root", default="data/vision_samples", help="Root folder containing sample sessions.")
+    annotate_parser.add_argument("--no-ui", action="store_true", help="Use terminal prompts instead of the Tkinter window.")
+    annotate_parser.set_defaults(func=lambda a: annotate_samples(a.session, root=a.root, use_ui=not a.no_ui))
+
     return parser
 
 

@@ -118,7 +118,7 @@ class CautiousFallbackPolicy(DrivingPolicy):
             combined_steer += (-vision_lane * 0.35)
             
         ai_brake = float(frame.values.get("normalized_ai_brake_difference", 0.0) or 0.0) / 127.0
-        brake = min(0.65, max(0.0, ai_brake))
-        # FH5 needs enough throttle to actually move and generate useful training data
-        throttle = 0.50 if speed < 35 and brake < 0.1 else 0.20
+        brake = min(0.85, max(0.0, ai_brake))
+        # Full throttle unless the game's AI brake signal says to slow down — no speed cap
+        throttle = 0.0 if brake > 0.05 else 0.85
         return Controls(steer=max(-0.75, min(0.75, combined_steer)), throttle=throttle, brake=brake)

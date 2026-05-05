@@ -26,10 +26,8 @@ def resolve_terrain_preference(model_type: str, preference: str = "auto") -> str
         raise ValueError(f"Unknown terrain preference '{preference}'. Expected one of: {choices}")
     if value != "auto":
         return value
-    kind = (model_type or "").strip().lower()
-    if kind == "racing":
-        return "road"
-    return "mixed"
+    # Default to road for all driving types — offroad must be explicitly requested
+    return "road"
 
 
 # Per-wheel field groups: (rumble_strip, surface_rumble, puddle, combined_slip, slip_ratio)
@@ -146,6 +144,12 @@ def terrain_reward(reading: TerrainReading, preference: str) -> tuple[float, flo
             penalty = 0.0
         return reward, penalty
 
+    # "mixed" — no reward for offroad but still penalise leaving the road entirely
+    if reading.state == "offroad":
+        base_penalty = max(3.0, 6.0 * reading.offroad_score)
+        return 0.0, base_penalty * wheel_mult
+    if reading.state == "mixed":
+        return 0.0, 0.40 + 1.5 * reading.offroad_score
     return 0.0, 0.0
 
 

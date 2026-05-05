@@ -5,3 +5,8 @@ vgamepad>=0.1.0
 
 [:python_version < "3.11"]
 tomli>=2.0
+
+[vision]
+mss>=9.0
+opencv-python>=4.8
+pytesseract>=0.3
