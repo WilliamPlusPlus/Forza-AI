@@ -9,7 +9,7 @@ from sklearn.multioutput import MultiOutputRegressor
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-from .policy import FEATURES, frame_features, frame_label
+from .policy import FEATURES, MotionHistory, frame_features, frame_label
 from .telemetry import TelemetryFrame, is_driving_frame, read_frames
 
 
@@ -33,9 +33,12 @@ def train_model(
 
     x_rows: list[np.ndarray] = []
     y_rows: list[list[float]] = []
+    motion_history = MotionHistory()
     for frame in frames:
+        motion_history.enrich(frame)
         label = frame_label(frame)
         if label is None or not is_driving_frame(frame):
+            motion_history.reset()
             continue
         x_rows.append(frame_features(frame))
         y_rows.append([label.steer, label.throttle, label.brake, label.handbrake])

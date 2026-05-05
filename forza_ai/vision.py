@@ -1,6 +1,14 @@
 from __future__ import annotations
 
 import ctypes
+
+try:
+    # Tell Windows we are DPI-aware so it gives us native pixel coordinates
+    # instead of logical coordinates scaled by the OS display settings.
+    ctypes.windll.user32.SetProcessDPIAware()
+except AttributeError:
+    pass
+
 import json
 import re
 from dataclasses import dataclass, field
@@ -49,6 +57,8 @@ class VisualCueReader:
     _calibration_mtime: float = field(default=-1.0, init=False, repr=False)
     _pil: Any = field(default=None, init=False, repr=False)
     _tesseract: Any = field(default=None, init=False, repr=False)
+    _segformer: Any = field(default=None, init=False, repr=False)
+    _custom_classifier: Any = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.enabled is None:
@@ -81,6 +91,19 @@ class VisualCueReader:
             self._tesseract = pytesseract
         except ImportError:
             self._tesseract = None
+            
+        try:
+            from .vision_models import SegformerPredictor
+            self._segformer = SegformerPredictor()
+        except ImportError as exc:
+            self._segformer = None
+
+        try:
+            from .vision_classifier import CustomVisionClassifier
+            self._custom_classifier = CustomVisionClassifier(model_path="data/vision_surface/classifier.pt")
+        except ImportError:
+            self._custom_classifier = None
+
         self._calibration_path = _resolve_optional_path(self.profile.get("surface_calibration"))
         self._load_surface_calibration()
 
@@ -131,6 +154,12 @@ class VisualCueReader:
 
         values["vision_available"] = 1
         values.update(target_values)
+        
+        if self._custom_classifier is not None and self._custom_classifier.is_loaded:
+            rgb_full = np.asarray(screenshot.convert("RGB"), dtype=np.uint8)
+            custom_preds = self._custom_classifier.predict(rgb_full)
+            values.update(custom_preds)
+
         ocr_texts: list[str] = []
         ocr_due = self._last_ocr_frame < 0 or frame_number - self._last_ocr_frame >= max(
             1, int(self.profile.get("ocr_interval_frames", 45) or 45)
@@ -301,6 +330,18 @@ class VisualCueReader:
         rgb = np.asarray(image.convert("RGB").resize((80, 45)), dtype=np.float32) / 255.0
         mask = _resize_bool_mask(self._region_mask(image.size, region), (80, 45))
         scores = visual_surface_scores(rgb, mask=mask, calibration=self._current_surface_calibration())
+        
+        if self._segformer is not None:
+            try:
+                nn_scores = self._segformer.predict_surface_scores(rgb, mask)
+                scores["road_score"] = nn_scores["road_score"]
+                scores["offroad_score"] = nn_scores["offroad_score"]
+                scores["grass_score"] = nn_scores["grass_score"]
+                scores["dirt_score"] = nn_scores["dirt_score"]
+                scores["asphalt_score"] = nn_scores["road_score"]
+            except Exception:
+                pass  # Fallback to standard visual_surface_scores if inference fails
+
         road_score = scores["road_score"]
         offroad_score = scores["offroad_score"]
         lane_score = scores["lane_marking_score"]
@@ -606,6 +647,14 @@ def visual_surface_scores(
         & (brightness > 0.12)
         & (brightness < 0.72)
     )
+    worn_pavement_mask = (
+        (brightness > 0.18)
+        & (brightness < 0.68)
+        & (saturation < 0.42)
+        & (red > blue * 1.02)
+        & (green > blue * 1.00)
+        & ~green_mask
+    )
     lane_mask = (
         (brightness > 0.66)
         & (saturation < 0.30)
@@ -618,17 +667,24 @@ def visual_surface_scores(
     texture = _masked_std(brightness, valid)
     grass_score = _masked_mean(green_mask, valid)
     dirt_score = _masked_mean(dirt_mask, valid)
-    asphalt_score = _masked_mean(asphalt_mask, valid)
+    asphalt_score = _masked_mean(asphalt_mask | worn_pavement_mask, valid)
+    worn_pavement_score = _masked_mean(worn_pavement_mask, valid)
     lane_score = _masked_mean(lane_mask, valid)
     lane_offset = _lane_center_offset(lane_mask, valid)
-    road_mask = asphalt_mask | lane_mask
+    road_mask = asphalt_mask | worn_pavement_mask | lane_mask
     road_offset = _mask_center_offset(road_mask, valid)
     road_heading = _mask_heading(road_mask, valid)
     offroad_score = _clamp01(grass_score * 0.72 + dirt_score * 0.62 + max(0.0, texture - 0.18) * 0.70)
-    road_score = _clamp01(asphalt_score * 0.72 + lane_score * 0.45 + max(0.0, 0.28 - texture) * 0.25)
-    road_context = max(asphalt_score * 0.65, lane_score * 2.5)
+    road_score = _clamp01(
+        asphalt_score * 0.72
+        + worn_pavement_score * 0.35
+        + lane_score * 0.65
+        + max(0.0, 0.28 - texture) * 0.25
+    )
+    road_context = max(asphalt_score * 0.80, worn_pavement_score * 0.95, lane_score * 2.5)
     if road_context > 0.18:
-        offroad_score *= max(0.52, 1.0 - road_context * 0.55)
+        offroad_score *= max(0.22, 1.0 - road_context * 0.75)
+        dirt_score *= max(0.22, 1.0 - road_context * 0.75)
     calibrated_road, calibrated_dirt = _calibrated_surface_scores(arr, valid, calibration)
     if calibrated_road > 0.0 or calibrated_dirt > 0.0:
         weight = _calibration_weight(calibration)

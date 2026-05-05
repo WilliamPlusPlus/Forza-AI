@@ -1,0 +1,64 @@
+================================================================================
+  FORZA AI — SELF-TRAINING SESSION LOG
+  started  : 2026-05-05 01:34:20
+  online   : models\driving\fh5-driving-online.joblib
+  mode     : mixed  |  terrain: road  |  tx: manual
+  features : 170
+================================================================================
+
+VISION SAMPLES  dir=data\vision_samples\session_2026-05-05_01-34-20
+[00:02]  frames 1–300
+  reward    avg +0.1426   min -0.7019   max +1.8150
+  paths     steer +0.5096  speed -0.9804  terrain +0.5867  achievement +0.0071
+  speed     avg 16.1 mph
+  lane      avg error 0.023
+  terrain   road 100%
+  override  162 frame(s)
+  explore   ε=0.0052  σ=0.0203
+  model     fitted  updates=74056
+
+[00:04]  frames 301–600
+  reward    avg -0.1159   min -1.6387   max +1.4236
+  paths     steer +0.3799  speed -0.8593  terrain +0.3931  achievement -0.0316
+  speed     avg 15.4 mph
+  lane      avg error 0.126
+  terrain   road 100%
+  override  256 frame(s)
+  explore   ε=0.0049  σ=0.0198
+  model     fitted  updates=74315
+  stuck     1 event(s) this interval
+
+
+VISION SAMPLE  sample_id=20260505_013426_00000681_0001  frame=681  roi=data\vision_samples\session_2026-05-05_01-34-20\images\20260505_013426_00000681_0001_roi.png
+[00:07]  frames 601–900
+  reward    avg -0.5898   min -4.8443   max +1.3276
+  paths     steer +0.2537  speed -0.4635  terrain -0.1016  achievement -0.3510
+  speed     avg 9.6 mph
+  lane      avg error 0.368
+  terrain   road 100%
+  override  197 frame(s)
+  explore   ε=0.0047  σ=0.0193
+  model     fitted  updates=74577
+
+[00:09]  frames 901–1036
+  reward    avg +0.2541   min -2.0173   max +2.1084
+  paths     steer +0.1863  speed -0.2223  terrain +0.4026  achievement -0.1120
+  speed     avg 5.2 mph
+  lane      avg error 0.208
+  terrain   road 100%
+  override  84 frame(s)
+  explore   ε=0.0046  σ=0.0191
+  model     fitted  updates=74688
+  stuck     1 event(s) this interval
+
+
+SESSION SCORECARD
+  reward    avg -0.1576   min -4.8443   max +2.1084
+  speed     avg 12.3 mph
+  lane      avg error 0.154
+  terrain   road 100%
+  override  699 frame(s)
+  stuck     2 event(s)
+  crash     0 event(s)
+
+SESSION END  total_frames=1036  updates=74688  elapsed=00:00:09

@@ -104,13 +104,94 @@ class KeyboardOverrideReader:
             upshift=self._pressed("E"),
             downshift=self._pressed("Q"),
         ).clipped()
-        if not controls_active(controls):
+        if not controls_active(controls, steer_threshold=0.1, pedal_threshold=0.1):
             return None
         return UserOverride(controls=controls, source="keyboard", apply_to_controller=True)
 
     def _pressed(self, key: str) -> bool:
         code = _KEY_CODES[key]
         return bool(self._user32.GetAsyncKeyState(code) & 0x8000)
+
+
+class XboxControllerReader:
+    """Reads the state of a physical Xbox controller using XInput."""
+    
+    def __init__(self, enabled: bool = True) -> None:
+        self.enabled = enabled
+        self._xinput = getattr(getattr(ctypes, "windll", None), "xinput1_4", None)
+        if self._xinput is None:
+             self._xinput = getattr(getattr(ctypes, "windll", None), "xinput1_3", None)
+             
+    @property
+    def available(self) -> bool:
+        return self.enabled and self._xinput is not None
+
+    def poll(self) -> UserOverride | None:
+        if not self.available:
+            return None
+            
+        state = _XINPUT_STATE()
+        res = self._xinput.XInputGetState(0, ctypes.byref(state))
+        if res != 0: # Not connected or error
+            return None
+            
+        gamepad = state.Gamepad
+        
+        # Deadzones and normalization
+        # Left Stick X: -32768 to 32767. Deadzone ~7849
+        steer_raw = float(gamepad.sThumbLX)
+        if abs(steer_raw) < 8000:
+            steer = 0.0
+        else:
+            steer = steer_raw / 32767.0
+            
+        # Triggers: 0 to 255. Deadzone ~30
+        throttle_raw = float(gamepad.bLeftTrigger) # Note: vgamepad/Forza might swap these, but physically it's usually Right=Gas
+        brake_raw = float(gamepad.bRightTrigger)
+        
+        # Wait, usually RT is Gas (bRightTrigger) and LT is Brake (bLeftTrigger)
+        throttle = gamepad.bRightTrigger / 255.0 if gamepad.bRightTrigger > 30 else 0.0
+        brake = gamepad.bLeftTrigger / 255.0 if gamepad.bLeftTrigger > 30 else 0.0
+        
+        # Buttons
+        handbrake = 1.0 if (gamepad.wButtons & 0x1000) else 0.0 # A Button
+        upshift = bool(gamepad.wButtons & 0x2000) # B Button
+        downshift = bool(gamepad.wButtons & 0x4000) # X Button
+        clutch = 1.0 if (gamepad.wButtons & 0x8000) else 0.0 # Y Button
+        
+        controls = Controls(
+            steer=steer,
+            throttle=throttle,
+            brake=brake,
+            handbrake=handbrake,
+            upshift=upshift,
+            downshift=downshift,
+            clutch=clutch,
+        ).clipped()
+        
+        if not controls_active(controls, steer_threshold=0.15, pedal_threshold=0.12):
+            return None
+            
+        return UserOverride(controls=controls, source="xbox controller", apply_to_controller=True)
+
+
+class _XINPUT_GAMEPAD(ctypes.Structure):
+    _fields_ = [
+        ("wButtons", ctypes.c_ushort),
+        ("bLeftTrigger", ctypes.c_ubyte),
+        ("bRightTrigger", ctypes.c_ubyte),
+        ("sThumbLX", ctypes.c_short),
+        ("sThumbLY", ctypes.c_short),
+        ("sThumbRX", ctypes.c_short),
+        ("sThumbRY", ctypes.c_short),
+    ]
+
+
+class _XINPUT_STATE(ctypes.Structure):
+    _fields_ = [
+        ("dwPacketNumber", ctypes.c_ulong),
+        ("Gamepad", _XINPUT_GAMEPAD),
+    ]
 
 
 _KEY_CODES = {

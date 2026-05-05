@@ -23,7 +23,7 @@
   "surface_regions": [
     {
       "name": "forward_surface",
-      "bbox": [0.30, 0.50, 0.40, 0.32],
+      "bbox": [0.0, 0.0, 1.0, 1.0],
       "road_threshold": 0.58,
       "offroad_threshold": 0.64,
       "lane_threshold": 0.015,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from forza_ai.policy import CautiousFallbackPolicy, FEATURES, frame_features
+from forza_ai.policy import CautiousFallbackPolicy, FEATURES, MotionHistory, frame_features
 from forza_ai.telemetry import TelemetryFrame
 
 
@@ -13,6 +13,8 @@ class PolicyFeatureTests(unittest.TestCase):
         self.assertIn("learned_redline_rpm", FEATURES)
         self.assertIn("learned_redline_confidence", FEATURES)
         self.assertIn("num_cylinders", FEATURES)
+        self.assertIn("motion_speed_delta_short", FEATURES)
+        self.assertIn("motion_road_curve_target", FEATURES)
 
     def test_frame_features_reads_car_model_fields(self):
         frame = TelemetryFrame(
@@ -23,6 +25,35 @@ class PolicyFeatureTests(unittest.TestCase):
         values = frame_features(frame, ["car_ordinal", "engine_max_rpm", "num_cylinders"])
 
         self.assertEqual(values.tolist(), [3781.0, 8000.0, 6.0])
+
+    def test_motion_history_adds_recent_car_context(self):
+        history = MotionHistory()
+        first = TelemetryFrame(
+            received_at=0.0,
+            profile="horizon_dash",
+            values={"speed": 10.0, "velocity_z": 8.0, "velocity_x": 1.0},
+        )
+        second = TelemetryFrame(
+            received_at=0.1,
+            profile="horizon_dash",
+            values={
+                "speed": 13.0,
+                "velocity_z": 11.0,
+                "velocity_x": 1.0,
+                "vision_road_center_offset": 0.5,
+                "vision_road_heading": 0.2,
+                "vision_road_score": 0.8,
+                "vision_offroad_score": 0.1,
+            },
+        )
+
+        history.enrich(first)
+        history.enrich(second)
+
+        self.assertAlmostEqual(second.values["motion_speed_delta_short"], 3.0)
+        self.assertGreater(second.values["motion_forward_ratio"], 0.8)
+        self.assertGreater(second.values["motion_road_clear_ahead"], 0.6)
+        self.assertGreater(second.values["motion_road_curve_target"], 0.2)
 
     def test_fallback_policy_uses_visual_road_direction_for_steering(self):
         policy = CautiousFallbackPolicy()

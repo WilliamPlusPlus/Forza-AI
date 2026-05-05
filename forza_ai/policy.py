@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -10,6 +11,19 @@ import numpy as np
 from .controller import Controls
 from .telemetry import TelemetryFrame, normalized_control_value
 
+
+MOTION_CONTEXT_FEATURES = [
+    "motion_speed_delta_short",
+    "motion_speed_delta_window",
+    "motion_yaw_delta_short",
+    "motion_forward_ratio",
+    "motion_lateral_ratio",
+    "motion_accel_forward",
+    "motion_grip_load",
+    "motion_road_clear_ahead",
+    "motion_road_curve_target",
+    "motion_user_override_active",
+]
 
 FEATURES = [
     "speed", "current_engine_rpm", "acceleration_x", "acceleration_z",
@@ -64,7 +78,82 @@ FEATURES = [
     "vision_race_hud_brightness", "vision_race_hud_contrast", "vision_race_hud_edges", "vision_race_hud_motion",
     "vision_track_prompt_brightness", "vision_track_prompt_contrast", "vision_track_prompt_edges", "vision_track_prompt_motion",
     "vision_penalty_prompt",
+    *MOTION_CONTEXT_FEATURES,
 ]
+
+
+class MotionHistory:
+    """Adds short-term car-state memory to telemetry frames.
+
+    A car is controlled through momentum, not a single snapshot. These features
+    summarize the last few frames plus the current visual road target so both
+    offline and online learners can associate steering/throttle choices with
+    where the car is already going.
+    """
+
+    def __init__(self, max_frames: int = 90) -> None:
+        self._frames: deque[TelemetryFrame] = deque(maxlen=max_frames)
+
+    def enrich(self, frame: TelemetryFrame) -> TelemetryFrame:
+        previous = self._frames[-1] if self._frames else None
+        oldest = self._frames[0] if self._frames else None
+        enrich_motion_context(frame, previous, oldest)
+        self._frames.append(frame)
+        return frame
+
+    def reset(self) -> None:
+        self._frames.clear()
+
+
+def enrich_motion_context(
+    frame: TelemetryFrame,
+    previous: TelemetryFrame | None = None,
+    oldest: TelemetryFrame | None = None,
+) -> TelemetryFrame:
+    values = frame.values
+    prev_values = previous.values if previous is not None else {}
+    old_values = oldest.values if oldest is not None else prev_values
+
+    speed = _feature_value(values.get("speed"))
+    prev_speed = _feature_value(prev_values.get("speed"))
+    old_speed = _feature_value(old_values.get("speed"))
+    yaw = _feature_value(values.get("yaw"))
+    prev_yaw = _feature_value(prev_values.get("yaw"))
+    yaw_rate = _feature_value(values.get("angular_velocity_y"))
+    forward = _feature_value(values.get("velocity_z"))
+    lateral = _feature_value(values.get("velocity_x"))
+    total_motion = abs(forward) + abs(lateral) + 1.0
+
+    road_score = max(
+        _feature_value(values.get("vision_road_score")),
+        _feature_value(values.get("vision_road_roi_road_score")),
+        _feature_value(values.get("vision_forward_surface_road_score")),
+        _feature_value(values.get("terrain_road_score")),
+    )
+    offroad_score = max(
+        _feature_value(values.get("vision_offroad_score")),
+        _feature_value(values.get("vision_road_roi_offroad_score")),
+        _feature_value(values.get("vision_forward_surface_offroad_score")),
+        _feature_value(values.get("terrain_offroad_score")),
+    )
+    road_offset = _feature_value(values.get("vision_road_center_offset"))
+    if road_offset == 0.0:
+        road_offset = _feature_value(values.get("vision_road_roi_road_center_offset"))
+    heading = _feature_value(values.get("vision_road_heading"))
+    if heading == 0.0:
+        heading = _feature_value(values.get("vision_road_roi_road_heading"))
+
+    values["motion_speed_delta_short"] = speed - prev_speed if previous is not None else 0.0
+    values["motion_speed_delta_window"] = speed - old_speed if oldest is not None else 0.0
+    values["motion_yaw_delta_short"] = yaw - prev_yaw if previous is not None else 0.0
+    values["motion_forward_ratio"] = max(0.0, forward) / total_motion
+    values["motion_lateral_ratio"] = abs(lateral) / total_motion
+    values["motion_accel_forward"] = _feature_value(values.get("acceleration_z"))
+    values["motion_grip_load"] = min(5.0, abs(yaw_rate) * max(0.0, speed) * 0.04 + abs(lateral) * 0.08)
+    values["motion_road_clear_ahead"] = max(-1.0, min(1.0, road_score - offroad_score))
+    values["motion_road_curve_target"] = max(-1.0, min(1.0, road_offset * 0.35 + heading * 0.45))
+    values["motion_user_override_active"] = 1.0 if _feature_value(values.get("user_override_active")) > 0.0 else 0.0
+    return frame
 
 
 def frame_features(frame: TelemetryFrame, features: list[str] | tuple[str, ...] = FEATURES) -> np.ndarray:

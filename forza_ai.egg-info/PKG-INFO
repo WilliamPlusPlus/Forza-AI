@@ -12,3 +12,5 @@ Requires-Dist: vgamepad>=0.1.0
 Provides-Extra: vision
 Requires-Dist: Pillow>=10.0; extra == "vision"
 Requires-Dist: pytesseract>=0.3.10; extra == "vision"
+Requires-Dist: transformers>=4.30; extra == "vision"
+Requires-Dist: torchvision>=0.15.0; extra == "vision"

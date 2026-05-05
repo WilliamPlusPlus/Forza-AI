@@ -9,8 +9,10 @@ import numpy as np
 from forza_ai.controller import Controls
 from forza_ai.learning import (
     OnlineDrivingPolicy,
+    RewardBreakdown,
     _TORCH_AVAILABLE,
     crash_penalty,
+    expert_override_active,
     movement_delta,
     reward_adjusted_target,
     score_metric,
@@ -533,6 +535,47 @@ class LearningTests(unittest.TestCase):
 
             self.assertEqual(reward.progress, 0.0)
             self.assertAlmostEqual(reward.score_gain, 2.0)
+
+    def test_clear_visual_road_increases_acceleration_reward(self):
+        road_reward = score_transition(
+            _frame(speed=10.0, distance_traveled=20.0),
+            _frame(
+                speed=14.0,
+                distance_traveled=24.0,
+                vision_road_score=0.85,
+                vision_offroad_score=0.05,
+            ),
+            Controls(throttle=0.8),
+        )
+        offroad_reward = score_transition(
+            _frame(speed=10.0, distance_traveled=20.0),
+            _frame(
+                speed=14.0,
+                distance_traveled=24.0,
+                vision_road_score=0.05,
+                vision_offroad_score=0.85,
+            ),
+            Controls(throttle=0.8),
+        )
+
+        self.assertGreater(road_reward.acceleration_bonus, offroad_reward.acceleration_bonus)
+
+    def test_visual_road_target_can_guide_positive_steering_target(self):
+        reward = RewardBreakdown(
+            visual_road_steer_target=0.6,
+            visual_road_steer_confidence=0.8,
+        )
+
+        target = reward_adjusted_target(Controls(steer=0.0, throttle=0.5), reward)
+
+        self.assertGreater(target.steer, 0.0)
+
+    def test_user_override_frame_is_expert_training_signal(self):
+        frame = _frame(user_override_active=1, user_override_source="keyboard")
+        hold = _frame(user_override_active=1, user_override_source="keyboard hold")
+
+        self.assertTrue(expert_override_active(frame))
+        self.assertFalse(expert_override_active(hold))
 
     def test_disabled_visual_reader_marks_frames_without_capture(self):
         reader = create_visual_cue_reader(None, enabled=False)

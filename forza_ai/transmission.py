@@ -85,6 +85,7 @@ class ShiftAdvisor:
     def __init__(self, mode: str = "automatic") -> None:
         self._mode = normalize_transmission_mode(mode)
         self._cooldown = 0       # frames remaining before next shift allowed
+        self._stuck_frames = 0   # frames stationary with high throttle
         # clutch state machine fields
         self._phase: str = "idle"
         self._phase_frames = 0
@@ -102,6 +103,21 @@ class ShiftAdvisor:
         rpm    = float(frame.values.get("current_engine_rpm", 0.0) or 0.0)
         gear   = int(frame.values.get("gear", 0) or 0)
         speed  = float(frame.values.get("speed", 0.0) or 0.0)
+
+        # Track if we are stuck (stationary with intention to move)
+        if speed < 1.0 and (controls.throttle > 0.5 or controls.brake > 0.5):
+            self._stuck_frames += 1
+        else:
+            self._stuck_frames = 0
+
+        # Forced recovery: if stuck for > 1s, try to get into 1st gear (gear 2)
+        if self._stuck_frames > 144:
+            if gear > 2:
+                # Force downshift toward 1st
+                return self._manual_shift(controls, False, True) if self._mode == "manual" else self._clutch_shift(controls, False, True)
+            elif gear < 2:
+                # Force upshift toward 1st (from Reverse/Neutral)
+                return self._manual_shift(controls, True, False) if self._mode == "manual" else self._clutch_shift(controls, True, False)
 
         if redline <= 0.0 or speed < _MIN_SHIFT_SPEED:
             return self._clear(controls)

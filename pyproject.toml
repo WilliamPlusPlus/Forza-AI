@@ -16,6 +16,8 @@ dependencies = [
 vision = [
   "Pillow>=10.0",
   "pytesseract>=0.3.10",
+  "transformers>=4.30",
+  "torchvision>=0.15.0",
 ]
 
 [project.scripts]

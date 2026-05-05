@@ -1,0 +1,327 @@
+================================================================================
+  FORZA AI — SELF-TRAINING SESSION LOG
+  started  : 2026-05-05 03:11:12
+  online   : models\driving\fh5-driving-online.joblib
+  mode     : mixed  |  terrain: road  |  tx: manual
+  features : 170
+================================================================================
+
+VISION SAMPLES  dir=data\vision_samples\session_2026-05-05_03-11-12
+[00:03]  frames 1–300
+  reward    avg +0.1273   min -0.6983   max +1.2550
+  paths     steer +0.5658  speed -0.4155  terrain -0.2895  achievement +0.0026
+  speed     avg 14.3 mph
+  lane      avg error 0.007
+  terrain   road 8% | mixed 92%
+  override  30 frame(s)
+  explore   ε=0.1188  σ=0.1194
+  model     fitted  updates=202028
+
+
+VISION SAMPLE  sample_id=20260505_031118_00000421_0001  frame=421  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031118_00000421_0001_roi.png
+[00:07]  frames 301–600
+  reward    avg +0.5005   min -3.2346   max +1.7596
+  paths     steer +0.7713  speed +0.0233  terrain -0.5332  achievement -0.2301
+  speed     avg 45.4 mph
+  lane      avg error 0.062
+  terrain   road 30% | mixed 70%
+  override  300 frame(s)
+  explore   ε=0.1119  σ=0.1159
+  model     fitted  updates=202328
+  crash     3 event(s) this interval
+
+
+VISION SAMPLE  sample_id=20260505_031121_00000651_0002  frame=651  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031121_00000651_0002_roi.png
+[00:12]  frames 601–900
+  reward    avg +0.3042   min -1.5746   max +1.5596
+  paths     steer +0.6412  speed +0.2851  terrain -1.0550  achievement -0.0886
+  speed     avg 53.7 mph
+  lane      avg error 0.244
+  terrain   road 79% | mixed 20%
+  override  295 frame(s)
+  explore   ε=0.1055  σ=0.1125
+  model     fitted  updates=202623
+  crash     1 event(s) this interval
+
+
+VISION SAMPLE  sample_id=20260505_031127_00001103_0003  frame=1103  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031127_00001103_0003_roi.png
+[00:16]  frames 901–1200
+  reward    avg +1.0134   min -1.2555   max +1.6282
+  paths     steer +0.6018  speed +0.2613  terrain -0.1525  achievement -0.0601
+  speed     avg 57.0 mph
+  lane      avg error 0.206
+  terrain   road 100%
+  override  284 frame(s)
+  explore   ε=0.0997  σ=0.1094
+  model     fitted  updates=202907
+  crash     2 event(s) this interval
+
+
+VISION SAMPLE  sample_id=20260505_031131_00001381_0004  frame=1381  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031131_00001381_0004_roi.png
+
+VISION SAMPLE  sample_id=20260505_031135_00001665_0005  frame=1665  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031135_00001665_0005_roi.png
+[00:24]  frames 1201–1800
+  reward    avg +1.9467   min +1.3048   max +2.3264
+  paths     steer +0.8066  speed +0.4796  terrain +0.2109  achievement +0.0061
+  speed     avg 63.3 mph
+  lane      avg error 0.093
+  terrain   road 100%
+  override  181 frame(s)
+  explore   ε=0.0938  σ=0.1061
+  model     fitted  updates=203210
+
+
+VISION SAMPLE  sample_id=20260505_031141_00002094_0006  frame=2094  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031141_00002094_0006_roi.png
+
+VISION SAMPLE  sample_id=20260505_031147_00002505_0007  frame=2505  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031147_00002505_0007_roi.png
+
+VISION SAMPLE  sample_id=20260505_031151_00002860_0008  frame=2860  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031151_00002860_0008_roi.png
+
+VISION SAMPLE  sample_id=20260505_031155_00003148_0009  frame=3148  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031155_00003148_0009_roi.png
+
+VISION SAMPLE  sample_id=20260505_031200_00003472_0010  frame=3472  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031200_00003472_0010_roi.png
+
+VISION SAMPLE  sample_id=20260505_031203_00003717_0011  frame=3717  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031203_00003717_0011_roi.png
+
+VISION SAMPLE  sample_id=20260505_031209_00004128_0012  frame=4128  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031209_00004128_0012_roi.png
+[00:58]  frames 1801–4200
+  reward    avg +0.0124   min -1.7974   max +1.6244
+  paths     steer +0.4059  speed -0.0198  terrain -0.6777  achievement +0.0024
+  speed     avg 20.7 mph
+  lane      avg error 0.122
+  terrain   road 99% | mixed 0%
+  override  334 frame(s)
+  explore   ε=0.0800  σ=0.0973
+  model     fitted  updates=204074
+  stuck     2 event(s) this interval
+
+
+VISION SAMPLE  sample_id=20260505_031215_00004583_0013  frame=4583  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031215_00004583_0013_roi.png
+
+VISION SAMPLE  sample_id=20260505_031219_00004841_0014  frame=4841  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031219_00004841_0014_roi.png
+
+VISION SAMPLE  sample_id=20260505_031223_00005098_0015  frame=5098  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031223_00005098_0015_roi.png
+
+VISION SAMPLE  sample_id=20260505_031228_00005478_0016  frame=5478  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031228_00005478_0016_roi.png
+
+VISION SAMPLE  sample_id=20260505_031232_00005756_0017  frame=5756  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031232_00005756_0017_roi.png
+[01:22]  frames 4201–6000
+  reward    avg -0.7654   min -1.3590   max -0.5196
+  paths     steer +0.0527  speed -0.1333  terrain -0.8108  achievement -0.0020
+  speed     avg 0.1 mph
+  lane      avg error 0.000
+  terrain   road 100%
+  override  277 frame(s)
+  explore   ε=0.0800  σ=0.0909
+  model     fitted  updates=204752
+  stuck     4 event(s) this interval
+
+
+VISION SAMPLE  sample_id=20260505_031238_00006233_0018  frame=6233  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031238_00006233_0018_roi.png
+[01:27]  frames 6001–6300
+  reward    avg -1.5146   min -2.9727   max -0.0713
+  paths     steer +0.3387  speed -0.9074  terrain -1.0709  achievement -0.0689
+  speed     avg 10.6 mph
+  lane      avg error 0.267
+  terrain   road 100%
+  override  265 frame(s)
+  explore   ε=0.0800  σ=0.0885
+  model     fitted  updates=205024
+  stuck     2 event(s) this interval
+
+[01:31]  frames 6301–6600
+  reward    avg +1.2972   min -0.1563   max +2.2360
+  paths     steer +0.7208  speed +0.1767  terrain +0.0082  achievement +0.0059
+  speed     avg 53.9 mph
+  lane      avg error 0.217
+  terrain   road 100%
+  override  249 frame(s)
+  explore   ε=0.0800  σ=0.0861
+  model     fitted  updates=205300
+
+
+VISION SAMPLE  sample_id=20260505_031245_00006721_0019  frame=6721  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031245_00006721_0019_roi.png
+[01:35]  frames 6601–6900
+  reward    avg +2.3586   min +1.7155   max +2.7500
+  paths     steer +0.8820  speed +0.7702  terrain +0.1699  achievement +0.0055
+  speed     avg 116.2 mph
+  lane      avg error 0.087
+  terrain   road 100%
+  override  300 frame(s)
+  explore   ε=0.0800  σ=0.0835
+  model     fitted  updates=205600
+
+
+VISION SAMPLE  sample_id=20260505_031250_00007074_0020  frame=7074  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031250_00007074_0020_roi.png
+[01:40]  frames 6901–7200
+  reward    avg +2.4721   min +1.9274   max +2.9037
+  paths     steer +0.9221  speed +0.9260  terrain +0.0250  achievement +0.0028
+  speed     avg 154.3 mph
+  lane      avg error 0.058
+  terrain   road 100%
+  override  284 frame(s)
+  explore   ε=0.0800  σ=0.0812
+  model     fitted  updates=205884
+
+
+VISION SAMPLE  sample_id=20260505_031254_00007360_0021  frame=7360  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031254_00007360_0021_roi.png
+[01:44]  frames 7201–7500
+  reward    avg +2.3850   min +1.9769   max +2.6230
+  paths     steer +0.8552  speed +0.8641  terrain +0.1243  achievement +0.0028
+  speed     avg 176.5 mph
+  lane      avg error 0.115
+  terrain   road 100%
+  override  300 frame(s)
+  explore   ε=0.0800  σ=0.0800
+  model     fitted  updates=206184
+
+
+VISION SAMPLE  sample_id=20260505_031259_00007651_0022  frame=7651  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031259_00007651_0022_roi.png
+[01:48]  frames 7501–7800
+  reward    avg +2.5001   min +2.2680   max +2.8978
+  paths     steer +0.8139  speed +1.1027  terrain +0.0101  achievement +0.0025
+  speed     avg 192.6 mph
+  lane      avg error 0.149
+  terrain   road 100%
+  override  300 frame(s)
+  explore   ε=0.0800  σ=0.0800
+  model     fitted  updates=206484
+
+
+VISION SAMPLE  sample_id=20260505_031303_00008011_0023  frame=8011  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031303_00008011_0023_roi.png
+[01:52]  frames 7801–8100
+  reward    avg +2.4500   min +1.9811   max +3.0667
+  paths     steer +0.8748  speed +1.0446  terrain -0.0775  achievement +0.0025
+  speed     avg 206.0 mph
+  lane      avg error 0.097
+  terrain   road 100%
+  override  300 frame(s)
+  explore   ε=0.0800  σ=0.0800
+  model     fitted  updates=206784
+
+[01:56]  frames 8101–8400
+  reward    avg +2.5888   min +2.3828   max +2.8461
+  paths     steer +0.9053  speed +1.1580  terrain -0.1229  achievement +0.0037
+  speed     avg 212.4 mph
+  lane      avg error 0.067
+  terrain   road 100%
+  override  185 frame(s)
+  explore   ε=0.0800  σ=0.0800
+  model     fitted  updates=206980
+
+
+VISION SAMPLE  sample_id=20260505_031310_00008541_0024  frame=8541  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031310_00008541_0024_roi.png
+
+VISION SAMPLE  sample_id=20260505_031314_00008835_0025  frame=8835  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031314_00008835_0025_roi.png
+
+VISION SAMPLE  sample_id=20260505_031321_00009330_0026  frame=9330  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031321_00009330_0026_roi.png
+
+VISION SAMPLE  sample_id=20260505_031325_00009589_0027  frame=9589  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031325_00009589_0027_roi.png
+
+VISION SAMPLE  sample_id=20260505_031328_00009841_0028  frame=9841  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031328_00009841_0028_roi.png
+[02:17]  frames 8401–9900
+  reward    avg +1.1189   min -3.4479   max +2.8004
+  paths     steer +0.7508  speed +0.3845  terrain -0.4516  achievement -0.0657
+  speed     avg 104.4 mph
+  lane      avg error 0.161
+  terrain   road 100%
+  override  390 frame(s)
+  explore   ε=0.0800  σ=0.0800
+  model     fitted  updates=207736
+  crash     3 event(s) this interval
+
+
+VISION SAMPLE  sample_id=20260505_031333_00010189_0029  frame=10189  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031333_00010189_0029_roi.png
+
+VISION SAMPLE  sample_id=20260505_031338_00010547_0030  frame=10547  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031338_00010547_0030_roi.png
+
+VISION SAMPLE  sample_id=20260505_031345_00011037_0031  frame=11037  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031345_00011037_0031_roi.png
+[02:34]  frames 9901–11100
+  reward    avg -0.3341   min -1.8501   max +1.5801
+  paths     steer +0.5433  speed -0.5841  terrain -0.5656  achievement +0.0035
+  speed     avg 13.8 mph
+  lane      avg error 0.081
+  terrain   road 100%
+  override  150 frame(s)
+  explore   ε=0.0800  σ=0.0800
+  model     fitted  updates=208144
+
+
+VISION SAMPLE  sample_id=20260505_031350_00011426_0032  frame=11426  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031350_00011426_0032_roi.png
+
+VISION SAMPLE  sample_id=20260505_031356_00011845_0033  frame=11845  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031356_00011845_0033_roi.png
+
+VISION SAMPLE  sample_id=20260505_031401_00012206_0034  frame=12206  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031401_00012206_0034_roi.png
+
+VISION SAMPLE  sample_id=20260505_031408_00012700_0035  frame=12700  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031408_00012700_0035_roi.png
+
+VISION SAMPLE  sample_id=20260505_031413_00013020_0036  frame=13020  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031413_00013020_0036_roi.png
+[03:02]  frames 11101–13200
+  reward    avg -0.4750   min -1.8867   max +1.0556
+  paths     steer +0.1791  speed -0.0803  terrain -0.7660  achievement -0.0004
+  speed     avg 4.4 mph
+  lane      avg error 0.086
+  terrain   road 100%
+  override  347 frame(s)
+  explore   ε=0.0800  σ=0.0800
+  model     fitted  updates=208921
+  stuck     4 event(s) this interval
+
+
+VISION SAMPLE  sample_id=20260505_031419_00013471_0037  frame=13471  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031419_00013471_0037_roi.png
+[03:07]  frames 13201–13500
+  reward    avg -0.8151   min -3.0252   max +1.0502
+  paths     steer +0.4260  speed -0.8178  terrain -0.5923  achievement -0.0102
+  speed     avg 15.4 mph
+  lane      avg error 0.291
+  terrain   road 100%
+  override  283 frame(s)
+  explore   ε=0.0800  σ=0.0800
+  model     fitted  updates=209204
+  stuck     1 event(s) this interval
+
+
+VISION SAMPLE  sample_id=20260505_031423_00013797_0038  frame=13797  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031423_00013797_0038_roi.png
+[03:11]  frames 13501–13800
+  reward    avg -0.5152   min -1.7087   max +0.6611
+  paths     steer +0.5517  speed -0.8087  terrain -0.4928  achievement +0.0061
+  speed     avg 20.1 mph
+  lane      avg error 0.349
+  terrain   road 100%
+  override  300 frame(s)
+  explore   ε=0.0800  σ=0.0800
+  model     fitted  updates=209504
+
+
+VISION SAMPLE  sample_id=20260505_031427_00014087_0039  frame=14087  roi=data\vision_samples\session_2026-05-05_03-11-12\images\20260505_031427_00014087_0039_roi.png
+[03:15]  frames 13801–14100
+  reward    avg +1.0459   min -0.7089   max +1.6673
+  paths     steer +0.7625  speed +0.0411  terrain -0.1760  achievement +0.0045
+  speed     avg 37.0 mph
+  lane      avg error 0.193
+  terrain   road 100%
+  override  128 frame(s)
+  explore   ε=0.0800  σ=0.0800
+  model     fitted  updates=209683
+
+[03:18]  frames 14101–14311
+  reward    avg +0.8140   min -0.4253   max +1.6899
+  paths     steer +0.7424  speed -0.1439  terrain -0.1636  achievement +0.0050
+  speed     avg 34.9 mph
+  lane      avg error 0.147
+  terrain   road 100%
+  override  63 frame(s)
+  explore   ε=0.0800  σ=0.0800
+  model     fitted  updates=209806
+
+
+SESSION SCORECARD
+  reward    avg +0.6288   min -3.4479   max +3.0667
+  speed     avg 64.3 mph
+  lane      avg error 0.149
+  terrain   road 95% | mixed 4%
+  override  5545 frame(s)
+  stuck     13 event(s)
+  crash     9 event(s)
+
+SESSION END  total_frames=14311  updates=209806  elapsed=00:03:18

@@ -60,10 +60,25 @@ class SessionLogger:
         self._terrain_counts: dict[str, int] = {
             "road": 0, "mixed": 0, "offroad": 0, "unknown": 0,
         }
+        self._lane_errors: list[float] = []
+        self._override_frames = 0
         self._stuck_events = 0
         self._crash_events = 0
         self._prev_stuck = False
         self._prev_crash = False
+        self._total_frames = 0
+        self._total_reward = 0.0
+        self._total_reward_min: float | None = None
+        self._total_reward_max: float | None = None
+        self._total_speed = 0.0
+        self._total_lane_error = 0.0
+        self._total_lane_error_count = 0
+        self._total_override_frames = 0
+        self._total_stuck_events = 0
+        self._total_crash_events = 0
+        self._total_terrain_counts: dict[str, int] = {
+            "road": 0, "mixed": 0, "offroad": 0, "unknown": 0,
+        }
 
         self.path.write_text(
             _HEADER.format(
@@ -86,6 +101,7 @@ class SessionLogger:
         policy: "OnlineDrivingPolicy",
         speed_ms: float,
         terrain_state: str,
+        override_active: bool = False,
     ) -> None:
         """Accumulate stats for one frame and flush every `interval` frames."""
         self._rewards.append(reward.total)
@@ -94,17 +110,34 @@ class SessionLogger:
         self._terrain_s.append(reward.terrain_score)
         self._achieve.append(reward.achievement_score)
         self._speeds_ms.append(max(0.0, speed_ms))
+        if reward.lane_error > 0.0:
+            self._lane_errors.append(reward.lane_error)
+        if override_active:
+            self._override_frames += 1
 
         key = terrain_state if terrain_state in self._terrain_counts else "unknown"
         self._terrain_counts[key] += 1
+        self._total_frames += 1
+        self._total_reward += reward.total
+        self._total_reward_min = reward.total if self._total_reward_min is None else min(self._total_reward_min, reward.total)
+        self._total_reward_max = reward.total if self._total_reward_max is None else max(self._total_reward_max, reward.total)
+        self._total_speed += max(0.0, speed_ms)
+        self._total_terrain_counts[key] += 1
+        if reward.lane_error > 0.0:
+            self._total_lane_error += reward.lane_error
+            self._total_lane_error_count += 1
+        if override_active:
+            self._total_override_frames += 1
 
         currently_stuck = reward.stuck_penalty > 0.0
         if currently_stuck and not self._prev_stuck:
             self._stuck_events += 1
+            self._total_stuck_events += 1
         self._prev_stuck = currently_stuck
         currently_crashed = reward.crash_penalty > 0.0
         if currently_crashed and not self._prev_crash:
             self._crash_events += 1
+            self._total_crash_events += 1
         self._prev_crash = currently_crashed
 
         if frame_num > 0 and frame_num % self.interval == 0:
@@ -118,7 +151,10 @@ class SessionLogger:
         elapsed = int(time.monotonic() - self._t0)
         h, rem = divmod(elapsed, 3600)
         m, s   = divmod(rem, 60)
+        scorecard = self._scorecard_lines()
         with self.path.open("a", encoding="utf-8") as f:
+            if scorecard:
+                f.write("\n".join(scorecard) + "\n")
             f.write(
                 f"\nSESSION END  total_frames={total_frames}  "
                 f"updates={policy.updates}  "
@@ -140,6 +176,7 @@ class SessionLogger:
         max_r   = max(self._rewards)
         min_r   = min(self._rewards)
         avg_mph = (sum(self._speeds_ms) / n) * 2.237
+        avg_lane = sum(self._lane_errors) / len(self._lane_errors) if self._lane_errors else 0.0
 
         total_t = max(1, sum(self._terrain_counts.values()))
         terrain_parts = [
@@ -165,7 +202,9 @@ class SessionLogger:
             f"  paths     steer {avg_st:+.4f}  speed {avg_sp:+.4f}  "
             f"terrain {avg_te:+.4f}  achievement {avg_ac:+.4f}",
             f"  speed     avg {avg_mph:.1f} mph",
+            f"  lane      avg error {avg_lane:.3f}",
             f"  terrain   {' | '.join(terrain_parts)}",
+            f"  override  {self._override_frames} frame(s)",
             f"  explore   ε={policy.epsilon:.4f}  σ={policy.exploration_std:.4f}",
             f"  model     {model_str}",
         ]
@@ -186,6 +225,36 @@ class SessionLogger:
         self._terrain_s.clear()
         self._achieve.clear()
         self._speeds_ms.clear()
+        self._lane_errors.clear()
         self._terrain_counts = {"road": 0, "mixed": 0, "offroad": 0, "unknown": 0}
+        self._override_frames = 0
         self._stuck_events = 0
         self._crash_events = 0
+
+    def _scorecard_lines(self) -> list[str]:
+        if self._total_frames <= 0:
+            return []
+        avg_reward = self._total_reward / self._total_frames
+        avg_mph = (self._total_speed / self._total_frames) * 2.237
+        avg_lane = (
+            self._total_lane_error / self._total_lane_error_count
+            if self._total_lane_error_count
+            else 0.0
+        )
+        total_t = max(1, sum(self._total_terrain_counts.values()))
+        terrain_parts = [
+            f"{k} {v * 100 // total_t}%"
+            for k, v in self._total_terrain_counts.items()
+            if v > 0
+        ]
+        return [
+            "",
+            "SESSION SCORECARD",
+            f"  reward    avg {avg_reward:+.4f}   min {self._total_reward_min:+.4f}   max {self._total_reward_max:+.4f}",
+            f"  speed     avg {avg_mph:.1f} mph",
+            f"  lane      avg error {avg_lane:.3f}",
+            f"  terrain   {' | '.join(terrain_parts)}",
+            f"  override  {self._total_override_frames} frame(s)",
+            f"  stuck     {self._total_stuck_events} event(s)",
+            f"  crash     {self._total_crash_events} event(s)",
+        ]

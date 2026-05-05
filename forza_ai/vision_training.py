@@ -245,7 +245,7 @@ def _tk_annotate(
 
     def show() -> None:
         sample = records[state["index"]]
-        path = Path(str(sample.get("roi_path", "")))
+        path = Path(str(sample.get("image_path", sample.get("roi_path", ""))))
         image = Image.open(path)
         image.thumbnail((960, 540))
         state["photo"] = ImageTk.PhotoImage(image)
@@ -261,6 +261,7 @@ def _tk_annotate(
         ("Dirt/Offroad", "dirt", "d"),
         ("Mixed", "mixed", "m"),
         ("Crash", "crash", "c"),
+        ("Menu", "menu", "u"),
         ("Skip", "skip", "s"),
     ):
         tk.Button(buttons, text=f"{text} ({key})", command=lambda value=label: save(value)).pack(side="left", padx=4)
@@ -285,7 +286,7 @@ def _terminal_annotate(
 ) -> int:
     for idx, sample in enumerate(records, start=1):
         print(f"[{idx}/{len(records)}] {sample.get('roi_path')}")
-        value = input("Label road/dirt/mixed/crash/skip/quit [skip]: ").strip().lower() or "skip"
+        value = input("Label road/dirt/mixed/crash/menu/skip/quit [skip]: ").strip().lower() or "skip"
         if value in {"q", "quit"}:
             break
         label_sample(sample, value, session_path=session_path, labels_path=labels_path, calibration_path=calibration_path)
@@ -310,9 +311,9 @@ def _latest_session(root: Path) -> Path | None:
 
 def _normalize_label(label: str) -> str:
     value = (label or "skip").strip().lower()
-    aliases = {"r": "road", "d": "dirt", "o": "offroad", "m": "mixed", "c": "crash", "s": "skip"}
+    aliases = {"r": "road", "d": "dirt", "o": "offroad", "m": "mixed", "c": "crash", "u": "menu", "s": "skip"}
     value = aliases.get(value, value)
-    if value not in {"road", "dirt", "offroad", "grass", "asphalt", "mixed", "crash", "skip"}:
+    if value not in {"road", "dirt", "offroad", "grass", "asphalt", "mixed", "crash", "menu", "skip"}:
         return "skip"
     return value
 

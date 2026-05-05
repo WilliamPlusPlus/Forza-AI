@@ -63,13 +63,13 @@ FH5_CONTROL_SCHEMA: dict[str, dict] = {
         "xbox": "B button",
         "range": (False, True),
         "managed_by": "ShiftAdvisor",
-        "notes": "Momentary press; fired at 88% of redline RPM",
+        "notes": "",
     },
     "downshift": {
         "xbox": "X button",
         "range": (False, True),
         "managed_by": "ShiftAdvisor",
-        "notes": "Momentary press; fired at 36% redline (lugging) or 52% while braking",
+        "notes": "",
     },
     "clutch": {
         "xbox": "Y button",

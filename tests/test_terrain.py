@@ -5,7 +5,8 @@ import unittest
 import numpy as np
 
 from forza_ai.telemetry import TelemetryFrame
-from forza_ai.terrain import enrich_terrain, infer_terrain, resolve_terrain_preference, terrain_reward
+from forza_ai.reward_config import load_reward_profile
+from forza_ai.terrain import TerrainReading, enrich_terrain, infer_terrain, resolve_terrain_preference, terrain_reward
 from forza_ai.vision import visual_surface_scores
 
 
@@ -159,6 +160,15 @@ class TerrainTests(unittest.TestCase):
 
         self.assertGreater(scores["road_score"], scores["offroad_score"])
 
+    def test_visual_surface_scores_treat_weathered_tan_pavement_as_road(self):
+        road = np.full((24, 48, 3), [0.54, 0.49, 0.38], dtype=np.float32)
+        road[:, 28:30] = [0.95, 0.68, 0.12]
+
+        scores = visual_surface_scores(road)
+
+        self.assertGreater(scores["asphalt_score"], 0.70)
+        self.assertGreater(scores["road_score"], scores["offroad_score"] + 0.20)
+
     def test_visual_surface_scores_can_limit_detection_to_masked_region(self):
         image = np.full((20, 20, 3), 0.35, dtype=np.float32)
         image[:, 10:, 0] = 0.70
@@ -256,6 +266,16 @@ class TerrainTests(unittest.TestCase):
         self.assertEqual(road_penalty, 0.0)
         self.assertEqual(offroad_bonus, 0.0)
         self.assertGreaterEqual(offroad_penalty, 0.40)
+
+    def test_all_wheels_on_road_multiplier_is_profile_configured(self):
+        profile = load_reward_profile()
+        clean_road = TerrainReading("road", confidence=1.0, road_score=1.0, wheels_off=0)
+        partial_contact = TerrainReading("road", confidence=1.0, road_score=1.0, wheels_off=1)
+
+        clean_bonus, _ = terrain_reward(clean_road, "road", profile)
+        partial_bonus, _ = terrain_reward(partial_contact, "road", profile)
+
+        self.assertGreater(clean_bonus, partial_bonus)
 
 
 if __name__ == "__main__":

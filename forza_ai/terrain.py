@@ -74,9 +74,14 @@ def _speed_scaled_suspension_params(speed: float) -> tuple[float, float, float, 
 
 def infer_terrain(frame: TelemetryFrame, previous: TelemetryFrame | None = None) -> TerrainReading:
     values = frame.values
+    
+    # Primary signal: High-performance visual model
+    visual = _visual_surface_reading(values)
+    if visual is not None and visual.confidence >= 0.40:
+        return visual
+
     required = ("speed", *_SUSPENSION_FIELDS)
     if any(name not in values for name in required):
-        visual = _visual_surface_reading(values)
         if visual is not None:
             return visual
         return TerrainReading("unknown", 0.0)
@@ -84,19 +89,18 @@ def infer_terrain(frame: TelemetryFrame, previous: TelemetryFrame | None = None)
     speed = _float(values.get("speed"))
     move = movement_delta(previous, frame) if previous is not None else speed * 0.05
     if speed < 0.5 and move < 0.2:
-        visual = _visual_surface_reading(values)
-        if visual is not None and visual.confidence >= 0.70:
+        if visual is not None:
             return visual
         return TerrainReading("unknown", 0.20)
 
-    # Score every wheel independently
+    # Backup signal: Suspension telemetry
     previous_values = previous.values if previous is not None else None
     wheel_scores = [_wheel_score(values, previous_values, field, speed) for field in _SUSPENSION_FIELDS]
     max_score  = max(wheel_scores)
     mean_score = sum(wheel_scores) / 4
     wheels_off = sum(1 for s in wheel_scores if s > _WHEEL_OFFROAD_THRESHOLD)
 
-    # Primary signal: weight the worst wheel heavily so one wheel off-road is caught
+    # Primary backup signal: weight the worst wheel heavily so one wheel off-road is caught
     offroad_score = 0.65 * max_score + 0.35 * mean_score
 
     # Amplify when multiple wheels are off-road
@@ -105,7 +109,6 @@ def infer_terrain(frame: TelemetryFrame, previous: TelemetryFrame | None = None)
     if wheels_off >= 3:
         offroad_score = min(1.0, offroad_score * 1.15)
 
-    visual = _visual_surface_reading(values)
     if visual is not None:
         if visual.state == "offroad":
             offroad_score = max(offroad_score, visual.offroad_score)
@@ -153,32 +156,34 @@ def terrain_reward(reading: TerrainReading, preference: str, reward_profile: Any
         wheel_mult = 1.0
 
     if pref == "road":
+        # Base the reward continuously on the exact road_score from the vision model
         reward_mult = _profile_number(reward_profile, "terrain.road_reward_multiplier", 0.20)
-        reward = reward_mult * reading.confidence if reading.state == "road" else 0.0
-        if reading.state == "offroad":
-            # Keep the penalty meaningful but bounded so one bad frame does not
-            # drown out several frames of useful progress/acceleration signal.
-            min_penalty = _profile_number(reward_profile, "terrain.road_offroad_min_penalty", 4.0)
+        reward = reward_mult * reading.road_score if reading.state != "offroad" else 0.0
+        
+        if reading.state == "road" and reading.wheels_off == 0:
+            reward *= _profile_number(reward_profile, "terrain.all_wheels_on_road_multiplier", 1.0)
+            
+        penalty = 0.0
+        if reading.offroad_score > 0.0:
             penalty_mult = _profile_number(reward_profile, "terrain.road_offroad_penalty_multiplier", 6.0)
             penalty_cap = _profile_number(reward_profile, "terrain.road_offroad_penalty_cap", 6.0)
-            base_penalty = max(min_penalty, penalty_mult * reading.offroad_score)
+            base_penalty = penalty_mult * reading.offroad_score
+            
+            # Apply minimums and thresholds if explicitly classified as offroad
+            if reading.state == "offroad":
+                min_penalty = _profile_number(reward_profile, "terrain.road_offroad_min_penalty", 4.0)
+                base_penalty = max(min_penalty, base_penalty)
+            elif reading.state == "mixed":
+                base = _profile_number(reward_profile, "terrain.road_mixed_base_penalty", 0.10)
+                base_penalty = base + _profile_number(reward_profile, "terrain.road_mixed_penalty_multiplier", 0.60) * reading.offroad_score
+            
             penalty = min(penalty_cap, base_penalty * wheel_mult)
-        elif reading.state == "mixed":
-            # Cobblestones / gravel edges register as mixed — keep this light.
-            # Graduated: 0.10 at low offroad_score up to 0.60 at high offroad_score
-            base = _profile_number(reward_profile, "terrain.road_mixed_base_penalty", 0.10)
-            penalty_mult = _profile_number(reward_profile, "terrain.road_mixed_penalty_multiplier", 0.60)
-            penalty_cap = _profile_number(reward_profile, "terrain.road_mixed_penalty_cap", 1.0)
-            base_penalty = base + penalty_mult * reading.offroad_score
-            penalty = min(penalty_cap, base_penalty * wheel_mult)
-        else:
-            penalty = 0.0
         return reward, penalty
 
     if pref == "offroad":
         reward_mult = _profile_number(reward_profile, "terrain.offroad_reward_multiplier", 0.20)
-        reward = reward_mult * reading.confidence if reading.state == "offroad" else 0.0
-        # Punish staying at extreme offroad angles (flipping, very rough terrain)
+        reward = reward_mult * reading.offroad_score
+        
         extreme_score = _profile_number(reward_profile, "terrain.offroad_extreme_score", 0.80)
         if reading.state == "offroad" and reading.offroad_score > extreme_score:
             penalty = _profile_number(reward_profile, "terrain.offroad_extreme_penalty", 0.35) * wheel_mult

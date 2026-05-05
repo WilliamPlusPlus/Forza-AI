@@ -8,9 +8,9 @@ from pathlib import Path
 from .config import load_config
 from .controller import Controls
 from .controller import create_controller
-from .learning import DRIVING_MODES, OnlineDrivingPolicy, _TORCH_AVAILABLE, resolve_driving_mode
+from .learning import DRIVING_MODES, OnlineDrivingPolicy, _TORCH_AVAILABLE, expert_override_active, resolve_driving_mode
 from .paths import DEFAULT_MODEL_TYPE, DEFAULT_NAME, data_path, model_path, online_model_path
-from .policy import CautiousFallbackPolicy, LearnedPolicy, SmoothPolicy
+from .policy import CautiousFallbackPolicy, LearnedPolicy, MotionHistory, SmoothPolicy
 from .redline import RedlineEstimator
 from .reward_config import default_reward_profile_path, load_reward_profile
 from .terminal_ui import DashboardState, TerminalDashboard, normalize_command
@@ -19,7 +19,7 @@ from .terrain import TERRAIN_PREFERENCES, enrich_terrain, resolve_terrain_prefer
 from .session_log import SessionLogger
 from .trainer import train_model
 from .transmission import TRANSMISSION_MODES, ShiftAdvisor, normalize_transmission_mode
-from .user_input import KeyboardOverrideReader, UserOverride, telemetry_user_override
+from .user_input import KeyboardOverrideReader, XboxControllerReader, UserOverride, telemetry_user_override
 from .vision import create_visual_cue_reader, default_vision_profile_path, list_vision_screens
 from .vision_training import (
     DEFAULT_CALIBRATION_PATH,
@@ -45,6 +45,7 @@ def _select_user_override(
     *,
     args: argparse.Namespace,
     keyboard_reader: KeyboardOverrideReader,
+    xbox_reader: XboxControllerReader,
     frame,
     last_program_controls: Controls | None,
 ) -> UserOverride | None:
@@ -54,7 +55,11 @@ def _select_user_override(
         keyboard = keyboard_reader.poll()
         if keyboard is not None:
             return keyboard
-    if getattr(args, "telemetry_override", True):
+    if getattr(args, "xbox_override", True):
+        xbox = xbox_reader.poll()
+        if xbox is not None:
+            return xbox
+    if getattr(args, "telemetry_override", False):
         return telemetry_user_override(
             frame,
             last_program_controls,
@@ -103,6 +108,7 @@ def record(args: argparse.Namespace) -> int:
             f"{vision_reader.status}; writing {output_path}"
         )
     previous_frame = None
+    motion_history = MotionHistory()
     redline_estimator = RedlineEstimator()
     try:
         for frame in receiver.frames(track):
@@ -110,6 +116,7 @@ def record(args: argparse.Namespace) -> int:
             seen += 1
             vision_reader.enrich(frame, seen)
             enrich_terrain(frame, previous_frame)
+            motion_history.enrich(frame)
             should_quit = False
             for command_text in dashboard.poll_commands():
                 command = normalize_command(command_text)
@@ -164,6 +171,21 @@ def vision_screens(args: argparse.Namespace) -> int:
         )
     print("Use one with: --vision-target screen --vision-screen <index>")
     return 0
+
+
+def train_vision(args: argparse.Namespace) -> int:
+    try:
+        from .vision_classifier import train_classifier
+        train_classifier(
+            labels_path=args.labels,
+            output_path=args.output,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+        )
+        return 0
+    except ImportError as exc:
+        print(f"Error: {exc}")
+        return 1
 
 
 def annotate_vision(args: argparse.Namespace) -> int:
@@ -289,6 +311,9 @@ def drive(args: argparse.Namespace) -> int:
     keyboard_reader = KeyboardOverrideReader(
         enabled=getattr(args, "user_override", True) and getattr(args, "keyboard_override", True)
     )
+    xbox_reader = XboxControllerReader(
+        enabled=getattr(args, "user_override", True) and getattr(args, "xbox_override", True)
+    )
     dashboard = TerminalDashboard(
         DashboardState(
             mode="drive",
@@ -316,6 +341,7 @@ def drive(args: argparse.Namespace) -> int:
         )
     seen = 0
     previous_frame = None
+    motion_history = MotionHistory()
     last_program_controls: Controls | None = None
     override_hold_frames = 0
     last_override_source = ""
@@ -328,6 +354,7 @@ def drive(args: argparse.Namespace) -> int:
             seen += 1
             vision_reader.enrich(frame, seen)
             enrich_terrain(frame, previous_frame)
+            motion_history.enrich(frame)
             should_quit = False
             force_neutral = False
             for command_text in dashboard.poll_commands():
@@ -344,6 +371,7 @@ def drive(args: argparse.Namespace) -> int:
             if force_neutral or dashboard.state.paused:
                 controller.neutral()
                 last_program_controls = Controls()
+                motion_history.reset()
                 dashboard.update(frame=frame, controls=Controls(), frames_seen=seen)
                 previous_learning_frame = None
                 previous_learning_controls = None
@@ -361,12 +389,14 @@ def drive(args: argparse.Namespace) -> int:
                             policy=online_policy,
                             speed_ms=float(frame.values.get("speed", 0.0) or 0.0),
                             terrain_state=str(frame.values.get("terrain_state", "unknown")),
+                            override_active=expert_override_active(previous_learning_frame),
                         )
                     if args.no_ui and args.autosave_frames > 0 and online_policy.updates % args.autosave_frames == 0:
                         print(f"learned {online_policy.updates} updates; last reward {reward.total:+.3f}")
                 override = _select_user_override(
                     args=args,
                     keyboard_reader=keyboard_reader,
+                    xbox_reader=xbox_reader,
                     frame=frame,
                     last_program_controls=last_program_controls,
                 )
@@ -425,6 +455,7 @@ def drive(args: argparse.Namespace) -> int:
             else:
                 controller.neutral()
                 last_program_controls = Controls()
+                motion_history.reset()
                 dashboard.update(frame=frame, controls=Controls(), frames_seen=seen, message="Waiting for Horizon driving telemetry")
                 previous_learning_frame = None
                 previous_learning_controls = None
@@ -493,6 +524,13 @@ def build_parser() -> argparse.ArgumentParser:
     annotate_parser.add_argument("--no-ui", action="store_true", help="Use terminal prompts instead of the small labeling window.")
     annotate_parser.set_defaults(func=annotate_vision)
 
+    train_vision_parser = sub.add_parser("train-vision", help="Train a custom vision classifier on labeled screenshots.")
+    train_vision_parser.add_argument("--labels", default=str(DEFAULT_LABELS_PATH), help="Path to labels.jsonl.")
+    train_vision_parser.add_argument("--output", default="data/vision_surface/classifier.pt", help="Path to save the trained model.")
+    train_vision_parser.add_argument("--epochs", type=int, default=15, help="Number of training epochs.")
+    train_vision_parser.add_argument("--batch-size", type=int, default=16, help="Batch size.")
+    train_vision_parser.set_defaults(func=train_vision)
+
     drive_parser = sub.add_parser("drive", help="Drive with a trained model or cautious fallback policy.")
     drive_parser.add_argument("--config", default="configs/horizon.toml")
     drive_parser.add_argument("--name", default=DEFAULT_NAME, help="Model/route name used for automatic file paths.")
@@ -540,7 +578,9 @@ def build_parser() -> argparse.ArgumentParser:
     drive_parser.add_argument("--no-user-override", dest="user_override", action="store_false", help="Disable human-input override while driving.")
     drive_parser.add_argument("--keyboard-override", dest="keyboard_override", action="store_true", default=True, help="Let WASD/arrow keyboard input override AI control (default on).")
     drive_parser.add_argument("--no-keyboard-override", dest="keyboard_override", action="store_false", help="Disable keyboard polling override.")
-    drive_parser.add_argument("--telemetry-override", dest="telemetry_override", action="store_true", default=True, help="Let human controller telemetry override AI control when it differs from program output (default on).")
+    drive_parser.add_argument("--xbox-override", dest="xbox_override", action="store_true", default=True, help="Let physical Xbox controller input override AI control (default on).")
+    drive_parser.add_argument("--no-xbox-override", dest="xbox_override", action="store_false", help="Disable physical Xbox controller override.")
+    drive_parser.add_argument("--telemetry-override", dest="telemetry_override", action="store_true", default=False, help="Let human controller telemetry override AI control when it differs from program output (default off).")
     drive_parser.add_argument("--no-telemetry-override", dest="telemetry_override", action="store_false", help="Disable telemetry-based human override detection.")
     drive_parser.add_argument("--override-difference-threshold", type=float, default=0.08, help="How different telemetry input must be from program output before it counts as human override.")
     drive_parser.add_argument("--override-release-frames", type=int, default=24, help="Neutral frames after user override ends so the model does not fight back immediately.")
