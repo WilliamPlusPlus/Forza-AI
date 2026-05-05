@@ -11,3 +11,8 @@ max_brake_delta = 0.12
 deadman_seconds = 1.0
 controller = "xbox"
 transmission_mode = "automatic"
+
+[learning]
+reward_profile = "configs/rewards/motorsport.json"
+vision_profile = "configs/vision/motorsport.json"
+vision_enabled = false

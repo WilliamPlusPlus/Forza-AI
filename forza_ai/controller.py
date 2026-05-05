@@ -4,6 +4,82 @@ from dataclasses import dataclass
 from typing import Protocol
 
 
+# ---------------------------------------------------------------------------
+# Forza Horizon 5 — full Xbox controller schema
+# ---------------------------------------------------------------------------
+# Each entry: (field_on_Controls, xbox_input, range, notes)
+#
+# ANALOG AXES (mapped to vgamepad axes / triggers)
+#   steer       Left Stick X        -1.0 (full left)  … +1.0 (full right)
+#   throttle    Right Trigger (RT)   0.0 (off)         … +1.0 (full throttle)
+#   brake       Left Trigger (LT)    0.0 (off)         … +1.0 (full brake / reverse when stopped)
+#   handbrake   A button             0.0 / 1.0         hold for e-brake / drift initiation
+#   clutch      Y button             0.0 / 1.0         hold during manual-clutch shift sequence
+#
+# DIGITAL BUTTONS (managed by ShiftAdvisor, not the learned model)
+#   upshift     B button             momentary press   shift up one gear
+#   downshift   X button             momentary press   shift down one gear
+#
+# NOT WIRED (game UI / camera — not useful for the driving policy)
+#   LB          Rewind / Anna        —
+#   RB          Anna / Rewind        —
+#   Start       Pause menu           —
+#   Back/View   Map                  —
+#   D-pad       Emotes / quick-chat  —
+#   RS click    Look back            —
+#   LS click    Horn                 —
+#   Right Stick Camera control       —
+#
+# GAME SETTINGS (not controller axes — toggled in assist menus)
+#   ABS, Traction Control, Stability Control, Steering Assist
+# ---------------------------------------------------------------------------
+
+FH5_CONTROL_SCHEMA: dict[str, dict] = {
+    "steer": {
+        "xbox": "Left Stick X",
+        "range": (-1.0, 1.0),
+        "managed_by": "learned_model",
+        "notes": "Negative = left, positive = right",
+    },
+    "throttle": {
+        "xbox": "Right Trigger (RT)",
+        "range": (0.0, 1.0),
+        "managed_by": "learned_model",
+        "notes": "Also engages forward gear when in reverse",
+    },
+    "brake": {
+        "xbox": "Left Trigger (LT)",
+        "range": (0.0, 1.0),
+        "managed_by": "learned_model",
+        "notes": "Engages reverse when speed < ~2 mph and throttle is released",
+    },
+    "handbrake": {
+        "xbox": "A button",
+        "range": (0.0, 1.0),
+        "managed_by": "learned_model",
+        "notes": "Hold for e-brake; used for drift initiation and tight hairpins",
+    },
+    "upshift": {
+        "xbox": "B button",
+        "range": (False, True),
+        "managed_by": "ShiftAdvisor",
+        "notes": "Momentary press; fired at 88% of redline RPM",
+    },
+    "downshift": {
+        "xbox": "X button",
+        "range": (False, True),
+        "managed_by": "ShiftAdvisor",
+        "notes": "Momentary press; fired at 36% redline (lugging) or 52% while braking",
+    },
+    "clutch": {
+        "xbox": "Y button",
+        "range": (0.0, 1.0),
+        "managed_by": "ShiftAdvisor",
+        "notes": "manual-clutch mode only; held for 5+4+7 frames around each shift",
+    },
+}
+
+
 @dataclass
 class Controls:
     steer: float = 0.0

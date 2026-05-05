@@ -1,0 +1,9 @@
+================================================================================
+  FORZA AI — SELF-TRAINING SESSION LOG
+  started  : 2026-05-04 14:29:44
+  online   : models\driving\fh5-driving-online.joblib
+  mode     : mixed  |  terrain: road  |  tx: manual
+  features : 107
+================================================================================
+
+SESSION END  total_frames=692  updates=7502  elapsed=00:00:04

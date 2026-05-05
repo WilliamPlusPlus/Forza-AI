@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(python -c ' *)",
-      "mcp__Windows-MCP__FileSystem"
+      "mcp__Windows-MCP__FileSystem",
+      "Bash(.venv/Scripts/python.exe -c \"import torch; print\\('torch', torch.__version__\\)\")",
+      "Bash(.venv/Scripts/pip.exe install *)"
     ]
   }
 }

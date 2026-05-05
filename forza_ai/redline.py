@@ -66,6 +66,7 @@ def _confidence(state: RedlineState, engine_max: float) -> float:
 
 def _float(value: object) -> float:
     try:
-        return float(value or 0.0)
+        v = float(value or 0.0)
+        return v if (v == v and v != float("inf") and v != float("-inf")) else 0.0
     except (TypeError, ValueError):
         return 0.0

@@ -153,7 +153,10 @@ class TelemetryReceiver:
             sock.settimeout(self.timeout_seconds)
             while True:
                 packet, _ = sock.recvfrom(2048)
-                yield self.parser.parse(packet, track)
+                try:
+                    yield self.parser.parse(packet, track)
+                except (ValueError, struct.error):
+                    pass
 
 
 def append_frame(path: str | Path, frame: TelemetryFrame) -> None:

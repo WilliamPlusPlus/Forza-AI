@@ -1,0 +1,51 @@
+{
+  "name": "forza_motorsport_screen_cues",
+  "enabled": false,
+  "target": {
+    "mode": "window",
+    "window_title": "Forza Motorsport",
+    "screen_index": 0,
+    "fallback": "desktop"
+  },
+  "interval_frames": 45,
+  "ocr_interval_frames": 60,
+  "metric_regions": [
+    {
+      "name": "race_hud",
+      "bbox": [0.34, 0.03, 0.32, 0.18]
+    },
+    {
+      "name": "track_prompt",
+      "bbox": [0.25, 0.10, 0.50, 0.18]
+    }
+  ],
+  "surface_regions": [
+    {
+      "name": "forward_surface",
+      "bbox": [0.30, 0.50, 0.40, 0.32],
+      "road_threshold": 0.58,
+      "offroad_threshold": 0.64,
+      "lane_threshold": 0.015,
+      "margin": 0.16
+    }
+  ],
+  "ocr_regions": [
+    {
+      "name": "race_prompt",
+      "kind": "text",
+      "bbox": [0.25, 0.10, 0.50, 0.18],
+      "scale": 2,
+      "tesseract_config": "--psm 6"
+    }
+  ],
+  "keyword_cues": [
+    {
+      "name": "wrong_way",
+      "keywords": ["wrong way", "wrong"]
+    },
+    {
+      "name": "penalty_prompt",
+      "keywords": ["penalty", "invalidated", "collision"]
+    }
+  ]
+}

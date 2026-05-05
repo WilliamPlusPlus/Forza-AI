@@ -1,0 +1,73 @@
+================================================================================
+  FORZA AI — SELF-TRAINING SESSION LOG
+  started  : 2026-05-04 14:26:44
+  online   : models\driving\fh5-driving-online.joblib
+  mode     : mixed  |  terrain: mixed  |  tx: automatic
+  features : 107
+================================================================================
+[00:03]  frames 1–300
+  reward    avg -0.0138   min -1.1187   max +0.3000
+  paths     steer +0.0000  speed -0.0675  terrain +0.0000  achievement +0.0402
+  speed     avg 0.0 mph
+  terrain   unknown 100%
+  explore   ε=0.1457  σ=0.1774
+  model     warming up  buffer=147/256
+
+[00:07]  frames 301–600
+  reward    avg -0.2216   min -4.3835   max +0.2947
+  paths     steer +0.0000  speed -0.0996  terrain -0.1678  achievement +0.0258
+  speed     avg 0.3 mph
+  terrain   mixed 1% | offroad 8% | unknown 89%
+  explore   ε=0.1372  σ=0.1721
+  model     fitted  updates=447
+
+[00:11]  frames 601–900
+  reward    avg -0.0443   min -1.1511   max +0.1927
+  paths     steer +0.0000  speed -0.0741  terrain +0.0000  achievement +0.0150
+  speed     avg 0.0 mph
+  terrain   unknown 100%
+  explore   ε=0.1292  σ=0.1670
+  model     fitted  updates=747
+
+[00:15]  frames 901–1200
+  reward    avg -0.0328   min -1.1339   max +0.0109
+  paths     steer +0.0000  speed -0.0535  terrain +0.0000  achievement +0.0100
+  speed     avg 0.0 mph
+  terrain   unknown 100%
+  explore   ε=0.1217  σ=0.1621
+  model     fitted  updates=1047
+
+[00:20]  frames 1201–1500
+  reward    avg -0.0902   min -1.1333   max +0.0506
+  paths     steer +0.0000  speed -0.1242  terrain +0.0000  achievement +0.0092
+  speed     avg 0.0 mph
+  terrain   unknown 100%
+  explore   ε=0.1146  σ=0.1573
+  model     fitted  updates=1347
+
+[00:24]  frames 1501–1800
+  reward    avg -0.2345   min -1.1798   max +0.0798
+  paths     steer +0.0000  speed -0.3143  terrain -0.0034  achievement +0.0203
+  speed     avg 0.4 mph
+  terrain   mixed 8% | offroad 1% | unknown 90%
+  explore   ε=0.1079  σ=0.1527
+  model     fitted  updates=1647
+
+[00:28]  frames 1801–2100
+  reward    avg -0.1278   min -1.1460   max +0.0123
+  paths     steer +0.0000  speed -0.1695  terrain +0.0000  achievement +0.0078
+  speed     avg 0.0 mph
+  terrain   unknown 100%
+  explore   ε=0.1016  σ=0.1482
+  model     fitted  updates=1947
+
+[00:31]  frames 2101–2355
+  reward    avg -0.0229   min -1.1271   max +0.0069
+  paths     steer +0.0000  speed -0.0370  terrain +0.0000  achievement +0.0068
+  speed     avg 0.0 mph
+  terrain   unknown 100%
+  explore   ε=0.0989  σ=0.1462
+  model     fitted  updates=2082
+
+
+SESSION END  total_frames=2355  updates=2082  elapsed=00:00:31

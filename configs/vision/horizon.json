@@ -1,0 +1,106 @@
+{
+  "name": "forza_horizon_5_screen_cues",
+  "enabled": true,
+  "target": {
+    "mode": "window",
+    "window_title": "Forza Horizon 5",
+    "screen_index": 0,
+    "fallback": "desktop"
+  },
+  "interval_frames": 30,
+  "ocr_interval_frames": 45,
+  "metric_regions": [
+    {
+      "name": "skill_hud",
+      "bbox": [0.32, 0.03, 0.36, 0.17]
+    },
+    {
+      "name": "center_route",
+      "bbox": [0.35, 0.18, 0.30, 0.20]
+    },
+    {
+      "name": "minimap",
+      "bbox": [0.02, 0.68, 0.20, 0.28]
+    },
+    {
+      "name": "reset_prompt",
+      "bbox": [0.28, 0.50, 0.44, 0.20]
+    }
+  ],
+  "surface_regions": [
+    {
+      "name": "forward_surface",
+      "bbox": [0.30, 0.48, 0.40, 0.34],
+      "road_threshold": 0.54,
+      "offroad_threshold": 0.64,
+      "lane_threshold": 0.015,
+      "margin": 0.16
+    },
+    {
+      "name": "near_surface",
+      "bbox": [0.22, 0.62, 0.56, 0.30],
+      "road_threshold": 0.54,
+      "offroad_threshold": 0.66,
+      "lane_threshold": 0.015,
+      "margin": 0.18
+    }
+  ],
+  "ocr_regions": [
+    {
+      "name": "skill_score",
+      "kind": "score",
+      "aliases": ["skill_score", "horizon_skill_score"],
+      "bbox": [0.35, 0.04, 0.30, 0.10],
+      "scale": 2,
+      "tesseract_config": "--psm 6 -c tessedit_char_whitelist=0123456789,."
+    },
+    {
+      "name": "skill_multiplier",
+      "kind": "multiplier",
+      "aliases": ["skill_multiplier", "horizon_skill_multiplier"],
+      "bbox": [0.45, 0.12, 0.16, 0.07],
+      "scale": 3,
+      "tesseract_config": "--psm 7 -c tessedit_char_whitelist=0123456789.xX"
+    },
+    {
+      "name": "hud_prompt",
+      "kind": "text",
+      "bbox": [0.25, 0.10, 0.50, 0.18],
+      "scale": 2,
+      "tesseract_config": "--psm 6"
+    },
+    {
+      "name": "reset_prompt",
+      "kind": "text",
+      "bbox": [0.28, 0.50, 0.44, 0.18],
+      "scale": 2,
+      "tesseract_config": "--psm 6"
+    }
+  ],
+  "keyword_cues": [
+    {
+      "name": "reset_prompt",
+      "keywords": ["reset", "rewind", "press y", "hold y"]
+    },
+    {
+      "name": "wrong_way",
+      "keywords": ["wrong way", "wrong"]
+    },
+    {
+      "name": "checkpoint",
+      "keywords": ["checkpoint", "missed"]
+    },
+    {
+      "name": "route_prompt",
+      "keywords": ["turn", "destination", "route", "roundabout"]
+    },
+    {
+      "name": "skill_chain",
+      "keywords": ["skill", "awesome", "great", "ultimate", "drift"]
+    },
+    {
+      "name": "wreckage_skill",
+      "keywords": ["wreckage", "landscaping", "sideswipe", "destruction"]
+    }
+  ]
+}

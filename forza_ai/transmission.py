@@ -57,13 +57,13 @@ _DOWNSHIFT_RPM_RATIO = 0.36
 _CORNER_DOWNSHIFT_RPM_RATIO = 0.52
 # Minimum speed (m/s) before any shift is attempted
 _MIN_SHIFT_SPEED = 3.0
-# Frames to wait between shifts to avoid double-firing (~60 Hz → 15 frames ≈ 250 ms)
-_SHIFT_COOLDOWN_FRAMES = 15
+# Frames to wait between shifts to avoid double-firing (~144 Hz → 36 frames ≈ 250 ms)
+_SHIFT_COOLDOWN_FRAMES = 36
 
-# Clutch-shift phase durations (frames at 60 Hz)
-_CLUTCH_IN_FRAMES   = 2   # hold clutch + ease throttle before pressing shift
-_SHIFTING_FRAMES    = 2   # shift button held
-_CLUTCH_OUT_FRAMES  = 3   # clutch held while gear engages, then released
+# Clutch-shift phase durations (frames at 144 Hz)
+_CLUTCH_IN_FRAMES   = 5   # hold clutch + ease throttle before pressing shift (~35 ms)
+_SHIFTING_FRAMES    = 4   # shift button held (~28 ms)
+_CLUTCH_OUT_FRAMES  = 7   # clutch held while gear engages, then released (~49 ms)
 
 
 class ShiftAdvisor:

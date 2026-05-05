@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import sqrt
+from typing import Any
 
 from .telemetry import TelemetryFrame
 
@@ -60,11 +61,17 @@ def infer_terrain(frame: TelemetryFrame, previous: TelemetryFrame | None = None)
     values = frame.values
     required = ("speed", "tire_combined_slip_fl", "tire_slip_ratio_fl")
     if any(name not in values for name in required):
+        visual = _visual_surface_reading(values)
+        if visual is not None:
+            return visual
         return TerrainReading("unknown", 0.0)
 
     speed = _float(values.get("speed"))
     move = movement_delta(previous, frame) if previous is not None else speed * 0.05
     if speed < 0.5 and move < 0.2:
+        visual = _visual_surface_reading(values)
+        if visual is not None and visual.confidence >= 0.70:
+            return visual
         return TerrainReading("unknown", 0.20)
 
     # Score every wheel independently
@@ -81,6 +88,15 @@ def infer_terrain(frame: TelemetryFrame, previous: TelemetryFrame | None = None)
         offroad_score = min(1.0, offroad_score * 1.25)
     if wheels_off >= 3:
         offroad_score = min(1.0, offroad_score * 1.15)
+
+    visual = _visual_surface_reading(values)
+    if visual is not None:
+        if visual.state == "offroad":
+            offroad_score = max(offroad_score, visual.offroad_score)
+            wheels_off = max(wheels_off, 2 if visual.confidence >= 0.70 else 1)
+        elif visual.state == "road" and offroad_score < 0.16 and wheels_off <= 1:
+            road_confidence = max(visual.confidence, 1.0 - offroad_score)
+            return TerrainReading("road", min(1.0, road_confidence), offroad_score, max(visual.road_score, 1.0 - offroad_score), wheels_off)
 
     road_score = 1.0 - min(1.0, offroad_score)
 
@@ -105,38 +121,46 @@ def enrich_terrain(frame: TelemetryFrame, previous: TelemetryFrame | None = None
     return frame
 
 
-def terrain_reward(reading: TerrainReading, preference: str) -> tuple[float, float]:
+def terrain_reward(reading: TerrainReading, preference: str, reward_profile: Any = None) -> tuple[float, float]:
     pref = resolve_terrain_preference("", preference)
     if reading.state == "unknown":
         return 0.0, 0.0
 
     # Penalty multiplier scales up when multiple wheels are off-road
     if reading.wheels_off >= 3:
-        wheel_mult = 2.5
+        wheel_mult = _profile_number(reward_profile, "terrain.multi_wheel_multiplier_3", 2.5)
     elif reading.wheels_off >= 2:
-        wheel_mult = 1.75
+        wheel_mult = _profile_number(reward_profile, "terrain.multi_wheel_multiplier_2", 1.75)
     else:
         wheel_mult = 1.0
 
     if pref == "road":
-        reward = 0.20 * reading.confidence if reading.state == "road" else 0.0
+        reward_mult = _profile_number(reward_profile, "terrain.road_reward_multiplier", 0.20)
+        reward = reward_mult * reading.confidence if reading.state == "road" else 0.0
         if reading.state == "offroad":
-            # Base penalty 5.0–8.0 scaled by confidence; wheel_mult amplifies further
-            base_penalty = max(5.0, 8.0 * reading.offroad_score)
+            # Base penalty 4.0–6.0 scaled by confidence; wheel_mult amplifies further
+            min_penalty = _profile_number(reward_profile, "terrain.road_offroad_min_penalty", 4.0)
+            penalty_mult = _profile_number(reward_profile, "terrain.road_offroad_penalty_multiplier", 6.0)
+            base_penalty = max(min_penalty, penalty_mult * reading.offroad_score)
             penalty = base_penalty * wheel_mult
         elif reading.state == "mixed":
-            # Graduated: 0.40 at low offroad_score up to 2.0 at high offroad_score
-            base_penalty = 0.40 + 2.0 * reading.offroad_score
+            # Cobblestones / gravel edges register as mixed — keep this light.
+            # Graduated: 0.10 at low offroad_score up to 0.60 at high offroad_score
+            base = _profile_number(reward_profile, "terrain.road_mixed_base_penalty", 0.10)
+            penalty_mult = _profile_number(reward_profile, "terrain.road_mixed_penalty_multiplier", 0.60)
+            base_penalty = base + penalty_mult * reading.offroad_score
             penalty = base_penalty * wheel_mult
         else:
             penalty = 0.0
         return reward, penalty
 
     if pref == "offroad":
-        reward = 0.20 * reading.confidence if reading.state == "offroad" else 0.0
+        reward_mult = _profile_number(reward_profile, "terrain.offroad_reward_multiplier", 0.20)
+        reward = reward_mult * reading.confidence if reading.state == "offroad" else 0.0
         # Punish staying at extreme offroad angles (flipping, very rough terrain)
-        if reading.state == "offroad" and reading.offroad_score > 0.80:
-            penalty = 0.35 * wheel_mult
+        extreme_score = _profile_number(reward_profile, "terrain.offroad_extreme_score", 0.80)
+        if reading.state == "offroad" and reading.offroad_score > extreme_score:
+            penalty = _profile_number(reward_profile, "terrain.offroad_extreme_penalty", 0.35) * wheel_mult
         else:
             penalty = 0.0
         return reward, penalty
@@ -171,6 +195,79 @@ def _float(value: object) -> float:
         return float(value or 0.0)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _profile_number(profile: Any, dotted_path: str, default: float) -> float:
+    number = getattr(profile, "number", None)
+    if callable(number):
+        return number(dotted_path, default)
+    return default
+
+
+def _visual_surface_reading(values: dict) -> TerrainReading | None:
+    road_score = _visual_road_score(values)
+    offroad_score = _visual_offroad_score(values, road_score)
+    lane_confidence = _visual_lane_confidence(values)
+    if lane_confidence > 0.0:
+        road_score = max(road_score, min(0.78, 0.56 + lane_confidence * 2.2))
+        offroad_score *= max(0.55, 1.0 - lane_confidence * 3.0)
+    if _float(values.get("vision_surface_is_road")) > 0.0:
+        road_score = max(road_score, 0.75)
+    if _float(values.get("vision_surface_is_offroad")) > 0.0:
+        if road_score >= 0.50 and lane_confidence >= 0.02:
+            offroad_score = max(offroad_score, 0.58)
+        else:
+            offroad_score = max(offroad_score, 0.75)
+    if road_score <= 0.0 and offroad_score <= 0.0:
+        return None
+    confidence = max(road_score, offroad_score)
+    margin = abs(road_score - offroad_score)
+    required_margin = 0.18 if road_score >= 0.42 else 0.10
+    if offroad_score >= 0.62 and offroad_score > road_score + required_margin:
+        return TerrainReading("offroad", confidence, offroad_score, road_score, wheels_off=2)
+    if road_score >= 0.58 and road_score > offroad_score + 0.10:
+        return TerrainReading("road", confidence, offroad_score, road_score, wheels_off=0)
+    if confidence >= 0.35:
+        return TerrainReading("mixed", min(0.85, confidence), offroad_score, road_score, wheels_off=1 if offroad_score > road_score else 0)
+    if margin > 0.20:
+        state = "offroad" if offroad_score > road_score else "road"
+        return TerrainReading(state, confidence, offroad_score, road_score, wheels_off=1 if state == "offroad" else 0)
+    return None
+
+
+def _visual_road_score(values: dict) -> float:
+    return max(
+        _float(values.get("vision_road_score")),
+        _float(values.get("vision_forward_surface_road_score")),
+        _float(values.get("vision_near_surface_road_score")),
+    )
+
+
+def _visual_offroad_score(values: dict, road_score: float) -> float:
+    direct = _float(values.get("vision_offroad_score"))
+    forward = _float(values.get("vision_forward_surface_offroad_score"))
+    near = _float(values.get("vision_near_surface_offroad_score"))
+    offroad_score = max(direct, forward)
+    if near <= offroad_score:
+        return offroad_score
+
+    # Dirt and grass at the edge of the near crop are common when the car is
+    # still on pavement. Let the near crop dominate only when road evidence is
+    # weak; otherwise treat it as shoulder context.
+    if road_score < 0.35:
+        return near
+    shoulder_weight = 0.70 if road_score < 0.50 else 0.50
+    return max(offroad_score, near * shoulder_weight)
+
+
+def _visual_lane_confidence(values: dict) -> float:
+    return max(
+        _float(values.get("vision_lane_confidence")),
+        _float(values.get("vision_forward_surface_lane_confidence")),
+        _float(values.get("vision_near_surface_lane_confidence")),
+        _float(values.get("vision_forward_surface_lane_marking_score")),
+        _float(values.get("vision_near_surface_lane_marking_score")),
+    )
 
 
 def _mean_abs(values: dict[str, object], names: tuple[str, ...]) -> float:

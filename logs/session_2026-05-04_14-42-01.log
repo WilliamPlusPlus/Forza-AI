@@ -1,0 +1,33 @@
+================================================================================
+  FORZA AI — SELF-TRAINING SESSION LOG
+  started  : 2026-05-04 14:42:01
+  online   : models\driving\fh5-driving-online.joblib
+  mode     : mixed  |  terrain: road  |  tx: manual
+  features : 113
+================================================================================
+[00:04]  frames 1–300
+  reward    avg -0.8139   min -9.1966   max +1.2417
+  paths     steer +0.4000  speed -0.0551  terrain -1.3996  achievement +0.0298
+  speed     avg 43.9 mph
+  terrain   road 9% | mixed 69% | offroad 21%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=22143
+
+[00:08]  frames 301–600
+  reward    avg -6.4075   min -9.3550   max +1.2157
+  paths     steer +0.4000  speed +0.3399  terrain -7.3037  achievement +0.0243
+  speed     avg 75.2 mph
+  terrain   road 11% | mixed 12% | offroad 76%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=22443
+
+[01:04]  frames 601–8529
+  reward    avg -8.8601   min -9.9081   max -6.2740
+  paths     steer +0.4000  speed +0.3004  terrain -9.7205  achievement +0.0200
+  speed     avg 63.7 mph
+  terrain   offroad 100%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=22543
+
+
+SESSION END  total_frames=8529  updates=22543  elapsed=00:01:04

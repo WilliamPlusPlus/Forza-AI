@@ -1,0 +1,9 @@
+================================================================================
+  FORZA AI — SELF-TRAINING SESSION LOG
+  started  : 2026-05-04 14:26:30
+  online   : models\driving\horizon-open-road-online.joblib
+  mode     : racing  |  terrain: road  |  tx: manual
+  features : 107
+================================================================================
+
+SESSION END  total_frames=193  updates=0  elapsed=00:00:01

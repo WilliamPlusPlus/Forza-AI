@@ -48,12 +48,71 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.type, "racing")
         self.assertEqual(args.transmission, "manual-clutch")
         self.assertEqual(args.terrain_preference, "road")
+        self.assertTrue(args.train_enabled)
         self.assertIsNone(args.model)
+
+    def test_drive_trains_by_default_and_can_disable_training(self):
+        args = build_parser().parse_args(["drive"])
+
+        self.assertTrue(args.train_enabled)
+
+        disabled = build_parser().parse_args(["drive", "--no-train"])
+        enabled = build_parser().parse_args(["drive", "--train"])
+        legacy = build_parser().parse_args(["drive", "--self-train"])
+
+        self.assertFalse(disabled.train_enabled)
+        self.assertTrue(enabled.train_enabled)
+        self.assertTrue(legacy.train_enabled)
 
     def test_record_can_select_terrain_preference(self):
         args = build_parser().parse_args(["record", "--name", "field", "--terrain-preference", "offroad"])
 
         self.assertEqual(args.terrain_preference, "offroad")
+
+    def test_drive_can_select_vision_target(self):
+        args = build_parser().parse_args(
+            [
+                "drive",
+                "--vision-target",
+                "screen",
+                "--vision-screen",
+                "1",
+                "--vision-app",
+                "Forza Horizon 5",
+            ]
+        )
+
+        self.assertEqual(args.vision_target, "screen")
+        self.assertEqual(args.vision_screen, 1)
+        self.assertEqual(args.vision_window_title, "Forza Horizon 5")
+
+    def test_drive_human_override_defaults_on_and_can_be_disabled(self):
+        args = build_parser().parse_args(["drive"])
+
+        self.assertTrue(args.user_override)
+        self.assertTrue(args.keyboard_override)
+        self.assertTrue(args.telemetry_override)
+
+        disabled = build_parser().parse_args(
+            [
+                "drive",
+                "--no-user-override",
+                "--no-keyboard-override",
+                "--no-telemetry-override",
+                "--override-difference-threshold",
+                "0.25",
+            ]
+        )
+
+        self.assertFalse(disabled.user_override)
+        self.assertFalse(disabled.keyboard_override)
+        self.assertFalse(disabled.telemetry_override)
+        self.assertEqual(disabled.override_difference_threshold, 0.25)
+
+    def test_vision_screens_command_is_available(self):
+        args = build_parser().parse_args(["vision-screens"])
+
+        self.assertEqual(args.func.__name__, "vision_screens")
 
 
 if __name__ == "__main__":

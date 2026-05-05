@@ -39,7 +39,8 @@ class TerminalDashboard:
     def start(self) -> None:
         if not self.enabled:
             return
-        self.state.message = "Type h for help"
+        if self.state.message == "Starting":
+            self.state.message = "Type h for help"
         self.render(force=True)
 
     def poll_commands(self) -> list[str]:
@@ -114,6 +115,7 @@ class TerminalDashboard:
         print(self._telemetry_line())
         print(self._transmission_line())
         print(self._terrain_line())
+        print(self._vision_surface_line())
         print(self._driver_inputs_line())
         print(self._score_line())
         print(self._controls_line())
@@ -196,6 +198,37 @@ class TerminalDashboard:
     def _terrain_line(self) -> str:
         return f"{terrain_line(self.state.last_frame)} | preference {self.state.terrain_preference}"
 
+    def _vision_surface_line(self) -> str:
+        frame = self.state.last_frame
+        if frame is None:
+            return "Vision surface: waiting for vision"
+        values = frame.values
+        if "vision_enabled" not in values:
+            return "Vision surface: waiting for vision"
+        if _as_float(values.get("vision_enabled")) <= 0.0:
+            return "Vision surface: disabled"
+        if _as_float(values.get("vision_available")) <= 0.0:
+            error = str(values.get("vision_capture_error", "") or "").strip()
+            detail = f" ({error})" if error else ""
+            return f"Vision surface: unavailable{detail}"
+
+        road_score = _as_float(values.get("vision_road_score"))
+        offroad_score = _as_float(values.get("vision_offroad_score"))
+        confidence = _as_float(values.get("vision_surface_confidence"), max(road_score, offroad_score))
+        if confidence <= 0.0 and "vision_road_score" not in values and "vision_offroad_score" not in values:
+            return "Vision surface: waiting for surface sample"
+
+        if _as_float(values.get("vision_surface_is_road")) > 0.0:
+            surface = "road"
+        elif _as_float(values.get("vision_surface_is_offroad")) > 0.0:
+            surface = "offroad"
+        else:
+            surface = "mixed"
+        return (
+            f"Vision surface: {surface} | road {road_score:.2f} | "
+            f"offroad {offroad_score:.2f} | confidence {confidence:.2f}"
+        )
+
     def _score_line(self) -> str:
         frame = self.state.last_frame
         if frame is None:
@@ -244,3 +277,10 @@ def normalize_command(command: str) -> str:
         "stop": "quit",
     }
     return aliases.get(value, value)
+
+
+def _as_float(value: object, default: float = 0.0) -> float:
+    try:
+        return float(value if value is not None else default)
+    except (TypeError, ValueError):
+        return default

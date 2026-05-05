@@ -1,0 +1,164 @@
+================================================================================
+  FORZA AI — SELF-TRAINING SESSION LOG
+  started  : 2026-05-04 14:45:03
+  online   : models\driving\fh5-driving-online.joblib
+  mode     : mixed  |  terrain: road  |  tx: manual
+  features : 114
+================================================================================
+[00:04]  frames 1–300
+  reward    avg -2.3308   min -22.8465   max +0.3000
+  paths     steer +0.0000  speed -0.3310  terrain -2.1074  achievement +0.0414
+  speed     avg 1.0 mph
+  terrain   mixed 9% | offroad 9% | unknown 80%
+  explore   ε=0.1413  σ=0.1747
+  model     fitted  updates=299
+  stuck     1 event(s) this interval
+
+[00:08]  frames 301–600
+  reward    avg -19.0216   min -24.1350   max -0.2284
+  paths     steer +0.2747  speed +0.0313  terrain -19.4988  achievement +0.0401
+  speed     avg 16.8 mph
+  terrain   mixed 9% | offroad 90%
+  explore   ε=0.1331  σ=0.1695
+  model     fitted  updates=599
+
+[00:12]  frames 601–900
+  reward    avg -12.2645   min -20.1948   max +1.2207
+  paths     steer +0.4000  speed +0.1626  terrain -13.0525  achievement +0.0579
+  speed     avg 36.3 mph
+  terrain   road 8% | mixed 24% | offroad 67%
+  explore   ε=0.1253  σ=0.1645
+  model     fitted  updates=899
+
+[00:16]  frames 901–1200
+  reward    avg +0.3814   min -13.1372   max +1.3957
+  paths     steer +0.4000  speed +0.2795  terrain -0.5279  achievement +0.0858
+  speed     avg 72.1 mph
+  terrain   road 40% | mixed 56% | offroad 3%
+  explore   ε=0.1180  σ=0.1597
+  model     fitted  updates=1199
+
+[00:20]  frames 1201–1500
+  reward    avg -0.7602   min -18.9533   max +1.4865
+  paths     steer +0.4000  speed +0.4676  terrain -1.8023  achievement +0.0680
+  speed     avg 115.7 mph
+  terrain   road 59% | mixed 31% | offroad 9%
+  explore   ε=0.1111  σ=0.1549
+  model     fitted  updates=1499
+
+[00:25]  frames 1501–1800
+  reward    avg -8.9752   min -19.2289   max +1.4993
+  paths     steer +0.3994  speed +0.4832  terrain -10.0195  achievement +0.0586
+  speed     avg 119.7 mph
+  terrain   road 16% | mixed 22% | offroad 61%
+  explore   ε=0.1047  σ=0.1504
+  model     fitted  updates=1799
+
+[00:29]  frames 1801–2100
+  reward    avg -20.1850   min -21.2322   max -14.7206
+  paths     steer +0.3945  speed -0.0047  terrain -20.8449  achievement +0.0719
+  speed     avg 65.0 mph
+  terrain   offroad 100%
+  explore   ε=0.0986  σ=0.1459
+  model     fitted  updates=2099
+
+[00:33]  frames 2101–2400
+  reward    avg -18.4902   min -21.8600   max -1.0586
+  paths     steer +0.2600  speed -0.7935  terrain -18.2746  achievement +0.0293
+  speed     avg 17.4 mph
+  terrain   offroad 96% | unknown 3%
+  explore   ε=0.0928  σ=0.1416
+  model     fitted  updates=2399
+  stuck     1 event(s) this interval
+
+[00:55]  frames 2401–5100
+  reward    avg -19.3253   min -20.2887   max -13.3459
+  paths     steer +0.4000  speed -0.0166  terrain -19.9654  achievement +0.0534
+  speed     avg 41.4 mph
+  terrain   offroad 100%
+  explore   ε=0.0908  σ=0.1400
+  model     fitted  updates=2512
+
+[00:59]  frames 5101–5400
+  reward    avg -15.1349   min -19.5753   max +0.6414
+  paths     steer +0.4000  speed +0.0489  terrain -15.8205  achievement +0.0465
+  speed     avg 45.9 mph
+  terrain   mixed 14% | offroad 86%
+  explore   ε=0.0855  σ=0.1359
+  model     fitted  updates=2812
+
+[01:04]  frames 5401–5700
+  reward    avg -16.7357   min -19.4647   max +0.6218
+  paths     steer +0.4000  speed +0.0550  terrain -17.4203  achievement +0.0406
+  speed     avg 49.3 mph
+  terrain   mixed 5% | offroad 95%
+  explore   ε=0.0805  σ=0.1319
+  model     fitted  updates=3112
+
+[01:08]  frames 5701–6000
+  reward    avg -5.6250   min -19.4549   max +0.6211
+  paths     steer +0.4000  speed +0.0581  terrain -6.2953  achievement +0.0238
+  speed     avg 50.5 mph
+  terrain   mixed 59% | offroad 41%
+  explore   ε=0.0758  σ=0.1280
+  model     fitted  updates=3412
+
+[01:13]  frames 6001–6300
+  reward    avg -17.5099   min -19.4584   max +0.3651
+  paths     steer +0.4000  speed +0.2641  terrain -18.3629  achievement +0.0417
+  speed     avg 62.5 mph
+  terrain   mixed 1% | offroad 98%
+  explore   ε=0.0714  σ=0.1242
+  model     fitted  updates=3712
+
+[01:17]  frames 6301–6600
+  reward    avg -12.2498   min -19.1418   max +1.1346
+  paths     steer +0.3997  speed +0.3475  terrain -13.1781  achievement +0.0508
+  speed     avg 77.3 mph
+  terrain   road 3% | mixed 14% | offroad 82%
+  explore   ε=0.0672  σ=0.1205
+  model     fitted  updates=4012
+
+[01:22]  frames 6601–6900
+  reward    avg -13.8245   min -20.2785   max +1.1446
+  paths     steer +0.4000  speed +0.3517  terrain -14.7527  achievement +0.0469
+  speed     avg 82.2 mph
+  terrain   road 10% | mixed 9% | offroad 80%
+  explore   ε=0.0633  σ=0.1169
+  model     fitted  updates=4312
+
+[01:26]  frames 6901–7200
+  reward    avg -0.8023   min -19.3346   max +1.2210
+  paths     steer +0.4000  speed +0.2961  terrain -1.6782  achievement +0.0390
+  speed     avg 80.4 mph
+  terrain   road 19% | mixed 69% | offroad 11%
+  explore   ε=0.0596  σ=0.1135
+  model     fitted  updates=4612
+
+[01:30]  frames 7201–7500
+  reward    avg -16.1500   min -21.8701   max +1.1676
+  paths     steer +0.3775  speed +0.2277  terrain -16.9386  achievement +0.0403
+  speed     avg 69.4 mph
+  terrain   road 0% | mixed 7% | offroad 92%
+  explore   ε=0.0562  σ=0.1101
+  model     fitted  updates=4912
+
+[01:35]  frames 7501–7800
+  reward    avg -19.4333   min -22.6931   max -1.0400
+  paths     steer +0.1938  speed -1.0028  terrain -18.9526  achievement +0.0308
+  speed     avg 12.5 mph
+  terrain   offroad 97% | unknown 3%
+  explore   ε=0.0529  σ=0.1069
+  model     fitted  updates=5212
+  stuck     2 event(s) this interval
+
+[01:39]  frames 7801–8353
+  reward    avg -13.8078   min -21.2127   max +0.6661
+  paths     steer +0.3972  speed -0.1170  terrain -14.3347  achievement +0.0247
+  speed     avg 34.4 mph
+  terrain   mixed 14% | offroad 85%
+  explore   ε=0.0500  σ=0.1039
+  model     fitted  updates=5495
+
+
+SESSION END  total_frames=8353  updates=5495  elapsed=00:01:39

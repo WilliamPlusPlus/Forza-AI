@@ -13,3 +13,8 @@ max_brake_delta   = 0.15
 deadman_seconds   = 1.0
 controller        = "xbox"
 transmission_mode = "automatic"
+
+[learning]
+reward_profile = "configs/rewards/horizon.json"
+vision_profile = "configs/vision/horizon.json"
+vision_enabled = true

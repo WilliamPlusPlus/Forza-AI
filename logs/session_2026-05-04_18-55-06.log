@@ -1,0 +1,503 @@
+================================================================================
+  FORZA AI — SELF-TRAINING SESSION LOG
+  started  : 2026-05-04 18:55:06
+  online   : models\driving\fh5-driving-online.joblib
+  mode     : mixed  |  terrain: road  |  tx: manual
+  features : 144
+================================================================================
+[00:03]  frames 1–300
+  reward    avg -6.8911   min -16.0404   max -0.4828
+  paths     steer +0.3564  speed -0.7881  terrain -6.7987  achievement +0.0034
+  speed     avg 20.2 mph
+  terrain   mixed 54% | offroad 45%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=788336
+
+[00:07]  frames 301–600
+  reward    avg -8.5591   min -25.8811   max +1.2558
+  paths     steer +0.3907  speed -0.2188  terrain -8.9736  achievement +0.0035
+  speed     avg 36.4 mph
+  terrain   road 40% | mixed 9% | offroad 50%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=788636
+  stuck     1 event(s) this interval
+
+[00:11]  frames 601–900
+  reward    avg -15.4183   min -24.9849   max -0.9192
+  paths     steer +0.0000  speed -1.2298  terrain -14.4065  achievement -0.0280
+  speed     avg 1.9 mph
+  terrain   road 22% | offroad 70% | unknown 7%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=788936
+  stuck     7 event(s) this interval
+
+[00:15]  frames 901–1200
+  reward    avg -13.0366   min -21.6561   max +0.0525
+  paths     steer +0.1600  speed -1.1712  terrain -12.2875  achievement -0.0522
+  speed     avg 8.4 mph
+  terrain   road 10% | mixed 10% | offroad 78%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=789236
+  stuck     3 event(s) this interval
+
+[00:19]  frames 1201–1500
+  reward    avg -15.0853   min -20.5163   max -13.1819
+  paths     steer +0.3900  speed -0.1989  terrain -15.5183  achievement +0.0071
+  speed     avg 39.1 mph
+  terrain   offroad 100%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=789536
+
+[00:23]  frames 1501–1800
+  reward    avg -9.5786   min -20.3484   max +1.4072
+  paths     steer +0.4650  speed +0.1532  terrain -10.4072  achievement +0.0087
+  speed     avg 71.0 mph
+  terrain   road 15% | mixed 14% | offroad 70%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=789836
+
+[00:28]  frames 1801–2100
+  reward    avg +1.2352   min +0.7622   max +1.4377
+  paths     steer +0.5062  speed +0.3873  terrain +0.1589  achievement +0.0071
+  speed     avg 91.1 mph
+  terrain   road 90% | mixed 9%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=790136
+
+[00:32]  frames 2101–2400
+  reward    avg +1.2111   min +0.9027   max +1.4695
+  paths     steer +0.5567  speed +0.4027  terrain +0.0475  achievement +0.0064
+  speed     avg 96.2 mph
+  terrain   road 63% | mixed 37%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=790436
+
+[00:36]  frames 2401–2700
+  reward    avg -11.4416   min -25.4369   max +1.5043
+  paths     steer +0.5237  speed +0.3581  terrain -12.5227  achievement +0.0091
+  speed     avg 81.1 mph
+  terrain   road 21% | mixed 16% | offroad 61%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=790736
+
+[00:40]  frames 2701–3000
+  reward    avg -10.5971   min -19.6641   max +1.3547
+  paths     steer +0.5231  speed +0.3398  terrain -11.6627  achievement +0.0092
+  speed     avg 76.6 mph
+  terrain   road 11% | mixed 18% | offroad 70%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=791036
+
+[00:44]  frames 3001–3300
+  reward    avg -16.1109   min -20.4563   max +0.1647
+  paths     steer +0.3988  speed -0.4984  terrain -16.3222  achievement +0.0118
+  speed     avg 26.3 mph
+  terrain   road 16% | mixed 0% | offroad 82%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=791336
+
+[00:48]  frames 3301–3600
+  reward    avg -16.3041   min -20.1376   max +0.1826
+  paths     steer +0.4232  speed -0.4171  terrain -16.6175  achievement +0.0122
+  speed     avg 26.8 mph
+  terrain   road 6% | mixed 1% | offroad 92%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=791636
+
+[00:53]  frames 3601–3900
+  reward    avg -2.6086   min -20.0508   max +1.2932
+  paths     steer +0.5057  speed -0.0997  terrain -3.2975  achievement +0.0101
+  speed     avg 31.2 mph
+  terrain   road 72% | mixed 3% | offroad 24%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=791936
+
+[00:57]  frames 3901–4200
+  reward    avg -0.6856   min -19.2510   max +1.2789
+  paths     steer +0.5627  speed +0.0762  terrain -1.5951  achievement +0.0045
+  speed     avg 50.9 mph
+  terrain   road 77% | mixed 12% | offroad 10%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=792236
+
+[01:01]  frames 4201–4500
+  reward    avg -12.1449   min -19.3041   max +1.3046
+  paths     steer +0.4609  speed +0.1903  terrain -12.9943  achievement +0.0059
+  speed     avg 43.3 mph
+  terrain   road 25% | mixed 1% | offroad 73%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=792536
+
+[01:05]  frames 4501–4800
+  reward    avg -0.0433   min -13.3244   max +1.3002
+  paths     steer +0.5313  speed +0.1338  terrain -0.9505  achievement +0.0032
+  speed     avg 50.6 mph
+  terrain   road 83% | mixed 9% | offroad 7%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=792836
+
+[01:09]  frames 4801–5100
+  reward    avg -0.3836   min -13.4137   max +1.3866
+  paths     steer +0.4950  speed +0.3824  terrain -1.4388  achievement +0.0068
+  speed     avg 98.6 mph
+  terrain   road 75% | mixed 13% | offroad 11%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=793136
+
+[01:13]  frames 5101–5400
+  reward    avg +1.0438   min -12.9609   max +1.5636
+  paths     steer +0.5306  speed +0.4500  terrain -0.1154  achievement +0.0034
+  speed     avg 137.1 mph
+  terrain   road 97% | mixed 0% | offroad 2%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=793436
+
+[01:18]  frames 5401–5700
+  reward    avg +1.0160   min -12.9969   max +1.6061
+  paths     steer +0.5407  speed +0.5678  terrain -0.2539  achievement +0.0046
+  speed     avg 162.5 mph
+  terrain   road 97% | offroad 3%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=793736
+
+[01:22]  frames 5701–6000
+  reward    avg +1.2942   min -12.9891   max +1.5878
+  paths     steer +0.5189  speed +0.5157  terrain +0.0992  achievement +0.0041
+  speed     avg 181.1 mph
+  terrain   road 99% | offroad 0%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=794036
+
+[01:26]  frames 6001–6300
+  reward    avg +1.0261   min -12.8242   max +1.6504
+  paths     steer +0.4905  speed +0.6624  terrain -0.2437  achievement +0.0041
+  speed     avg 193.4 mph
+  terrain   road 87% | mixed 9% | offroad 2%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=794336
+
+[01:30]  frames 6301–6600
+  reward    avg -5.5301   min -19.6143   max +1.6460
+  paths     steer +0.4515  speed +0.6205  terrain -6.7100  achievement +0.0064
+  speed     avg 175.5 mph
+  terrain   road 44% | mixed 16% | offroad 40%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=794636
+
+[01:34]  frames 6601–6900
+  reward    avg -6.0351   min -19.1433   max +1.5338
+  paths     steer +0.4974  speed +0.4293  terrain -7.1346  achievement +0.0098
+  speed     avg 117.4 mph
+  terrain   road 60% | mixed 1% | offroad 38%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=794936
+
+[01:38]  frames 6901–7200
+  reward    avg -8.3048   min -22.1538   max +1.3305
+  paths     steer +0.3749  speed -0.2518  terrain -8.6835  achievement +0.0177
+  speed     avg 59.1 mph
+  terrain   road 49% | mixed 1% | offroad 48%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=795236
+
+[01:43]  frames 7201–7500
+  reward    avg -16.6450   min -21.6425   max +1.0301
+  paths     steer +0.3453  speed -0.6921  terrain -16.6151  achievement +0.0058
+  speed     avg 24.5 mph
+  terrain   road 0% | mixed 1% | offroad 97%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=795536
+
+[01:47]  frames 7501–7800
+  reward    avg -18.3600   min -22.3229   max -13.6869
+  paths     steer +0.2702  speed -0.9243  terrain -18.0280  achievement +0.0022
+  speed     avg 12.7 mph
+  terrain   offroad 100%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=795836
+
+[01:51]  frames 7801–8100
+  reward    avg -21.4117   min -27.3786   max -14.1420
+  paths     steer +0.1011  speed -1.0595  terrain -20.7154  achievement -0.0004
+  speed     avg 12.2 mph
+  terrain   offroad 100%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=796136
+  stuck     1 event(s) this interval
+
+[02:02]  frames 8101–9000
+  reward    avg -16.4365   min -23.5240   max +1.6106
+  paths     steer +0.1435  speed -0.9983  terrain -15.8471  achievement -0.0060
+  speed     avg 8.5 mph
+  terrain   road 2% | mixed 0% | offroad 84% | unknown 12%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=796682
+  stuck     4 event(s) this interval
+
+[02:06]  frames 9001–9300
+  reward    avg -19.6484   min -21.6034   max -13.2811
+  paths     steer +0.4074  speed -0.1599  terrain -20.1361  achievement +0.0045
+  speed     avg 29.9 mph
+  terrain   offroad 100%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=796982
+
+[02:11]  frames 9301–9600
+  reward    avg -17.0962   min -21.2338   max -0.2562
+  paths     steer +0.3095  speed -1.1542  terrain -16.6402  achievement +0.0032
+  speed     avg 16.0 mph
+  terrain   mixed 1% | offroad 98%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=797282
+
+[02:15]  frames 9601–9900
+  reward    avg -18.4427   min -27.2887   max -8.8439
+  paths     steer +0.2446  speed -1.1142  terrain -17.8554  achievement -0.0629
+  speed     avg 12.6 mph
+  terrain   offroad 100%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=797582
+  stuck     1 event(s) this interval
+
+[02:19]  frames 9901–10200
+  reward    avg -10.9814   min -22.4857   max +0.9647
+  paths     steer +0.3817  speed -0.4664  terrain -11.1845  achievement +0.0037
+  speed     avg 19.8 mph
+  terrain   road 12% | mixed 20% | offroad 67%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=797882
+
+[02:23]  frames 10201–10500
+  reward    avg -3.5016   min -19.5132   max +0.9932
+  paths     steer +0.3029  speed -0.1171  terrain -3.8749  achievement +0.0126
+  speed     avg 32.7 mph
+  terrain   road 70% | mixed 4% | offroad 25%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=798182
+
+[02:27]  frames 10501–10800
+  reward    avg -0.8331   min -1.6131   max +2.1270
+  paths     steer +0.0047  speed -1.1572  terrain +0.0883  achievement -0.0027
+  speed     avg 2.1 mph
+  terrain   road 78% | unknown 21%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=798482
+  stuck     5 event(s) this interval
+
+[02:31]  frames 10801–11100
+  reward    avg -1.0476   min -21.3741   max +1.1744
+  paths     steer +0.3260  speed -0.3721  terrain -1.2375  achievement -0.0014
+  speed     avg 28.3 mph
+  terrain   road 69% | mixed 22% | offroad 8%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=798782
+  stuck     1 event(s) this interval
+
+[02:36]  frames 11101–11400
+  reward    avg -12.0617   min -21.5152   max +0.9075
+  paths     steer +0.1326  speed -0.8887  terrain -11.5459  achievement -0.0039
+  speed     avg 11.6 mph
+  terrain   road 27% | mixed 0% | offroad 72%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=799082
+  stuck     2 event(s) this interval
+
+[02:40]  frames 11401–11700
+  reward    avg -15.9366   min -20.4270   max -13.0049
+  paths     steer +0.4250  speed -0.7459  terrain -15.9810  achievement +0.0036
+  speed     avg 23.4 mph
+  terrain   offroad 100%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=799382
+
+[02:44]  frames 11701–12000
+  reward    avg -13.1491   min -19.3741   max +0.8322
+  paths     steer +0.5087  speed +0.0883  terrain -13.9885  achievement +0.0057
+  speed     avg 43.5 mph
+  terrain   mixed 6% | offroad 93%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=799682
+
+[02:48]  frames 12001–12300
+  reward    avg -15.3117   min -19.5212   max +1.1515
+  paths     steer +0.4577  speed +0.0892  terrain -16.0749  achievement +0.0053
+  speed     avg 46.0 mph
+  terrain   road 8% | mixed 10% | offroad 81%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=799982
+
+[03:35]  frames 12301–18600
+  reward    avg -21.3395   min -23.3442   max -19.4484
+  paths     steer +0.3254  speed -0.5230  terrain -21.4133  achievement +0.0041
+  speed     avg 29.1 mph
+  terrain   offroad 100%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=800249
+
+[03:42]  frames 18601–19200
+  reward    avg -19.8736   min -26.6005   max -14.0381
+  paths     steer +0.2482  speed -0.7689  terrain -19.6060  achievement -0.0248
+  speed     avg 18.6 mph
+  terrain   offroad 100%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=800656
+  stuck     1 event(s) this interval
+
+[03:46]  frames 19201–19500
+  reward    avg -19.5291   min -22.9290   max -14.0657
+  paths     steer +0.1386  speed -0.9419  terrain -18.9802  achievement -0.0033
+  speed     avg 14.4 mph
+  terrain   offroad 100%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=800956
+  stuck     1 event(s) this interval
+
+[03:50]  frames 19501–19800
+  reward    avg -10.6518   min -26.2921   max +1.3065
+  paths     steer +0.5126  speed -0.0534  terrain -11.3854  achievement +0.0075
+  speed     avg 39.3 mph
+  terrain   road 10% | mixed 23% | offroad 66%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=801256
+
+[03:54]  frames 19801–20100
+  reward    avg -15.1534   min -26.5241   max +0.7673
+  paths     steer +0.4431  speed -0.2434  terrain -15.6293  achievement +0.0060
+  speed     avg 33.5 mph
+  terrain   mixed 5% | offroad 94%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=801556
+
+[03:58]  frames 20101–20400
+  reward    avg -7.5529   min -20.0400   max +1.1986
+  paths     steer +0.5207  speed +0.0765  terrain -8.4027  achievement +0.0075
+  speed     avg 42.5 mph
+  terrain   road 16% | mixed 24% | offroad 59%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=801856
+
+[04:02]  frames 20401–20700
+  reward    avg -5.9720   min -19.3651   max +1.2271
+  paths     steer +0.4880  speed +0.0972  terrain -6.7856  achievement +0.0039
+  speed     avg 48.9 mph
+  terrain   road 28% | mixed 28% | offroad 43%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=802156
+
+[04:07]  frames 20701–21000
+  reward    avg -7.7960   min -17.5814   max +1.2995
+  paths     steer +0.5856  speed +0.0996  terrain -8.7558  achievement +0.0017
+  speed     avg 52.4 mph
+  terrain   road 11% | mixed 36% | offroad 53%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=802456
+
+[04:11]  frames 21001–21300
+  reward    avg -6.8559   min -25.6043   max +0.9220
+  paths     steer +0.5563  speed +0.0639  terrain -7.7446  achievement +0.0031
+  speed     avg 53.0 mph
+  terrain   mixed 48% | offroad 51%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=802756
+
+[04:15]  frames 21301–21600
+  reward    avg +0.3832   min -13.2880   max +1.2388
+  paths     steer +0.5532  speed +0.0406  terrain -0.4809  achievement +0.0018
+  speed     avg 51.3 mph
+  terrain   road 28% | mixed 69% | offroad 2%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=803056
+
+[04:19]  frames 21601–21900
+  reward    avg -4.9886   min -19.2308   max +1.3288
+  paths     steer +0.5612  speed +0.0500  terrain -5.8730  achievement +0.0026
+  speed     avg 51.7 mph
+  terrain   road 20% | mixed 29% | offroad 50%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=803356
+
+[04:55]  frames 21901–26400
+  reward    avg -8.4831   min -22.1688   max +0.5512
+  paths     steer +0.0514  speed -1.0996  terrain -7.6039  achievement -0.0767
+  speed     avg 6.0 mph
+  terrain   road 56% | mixed 1% | offroad 40% | unknown 1%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=803803
+  stuck     7 event(s) this interval
+
+[05:01]  frames 26401–26700
+  reward    avg -21.3368   min -27.4115   max -14.1164
+  paths     steer +0.2627  speed -1.1589  terrain -20.7899  achievement -0.0138
+  speed     avg 12.6 mph
+  terrain   offroad 100%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=804103
+  stuck     1 event(s) this interval
+
+[05:06]  frames 26701–27000
+  reward    avg -12.3548   min -20.8365   max +1.1108
+  paths     steer +0.4182  speed -0.5491  terrain -12.5480  achievement +0.0052
+  speed     avg 23.5 mph
+  terrain   road 30% | mixed 5% | offroad 65%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=804403
+
+[05:11]  frames 27001–27300
+  reward    avg -3.9385   min -19.3661   max +1.6957
+  paths     steer +0.4526  speed -0.3232  terrain -4.3651  achievement +0.0063
+  speed     avg 26.4 mph
+  terrain   road 56% | mixed 15% | offroad 29%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=804703
+
+[05:16]  frames 27301–27600
+  reward    avg -12.2182   min -25.6036   max +1.5509
+  paths     steer +0.5417  speed +0.2081  terrain -13.2012  achievement +0.0040
+  speed     avg 48.6 mph
+  terrain   road 21% | mixed 12% | offroad 66%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=805003
+
+[05:21]  frames 27601–27900
+  reward    avg -12.8328   min -20.1583   max +1.3690
+  paths     steer +0.4478  speed +0.2494  terrain -13.7119  achievement +0.0079
+  speed     avg 50.3 mph
+  terrain   road 5% | mixed 9% | offroad 85%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=805303
+
+[05:25]  frames 27901–28200
+  reward    avg -8.4368   min -20.0589   max +1.2556
+  paths     steer +0.4222  speed -0.2746  terrain -8.8571  achievement +0.0067
+  speed     avg 25.3 mph
+  terrain   road 24% | mixed 27% | offroad 48%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=805603
+
+[05:30]  frames 28201–28500
+  reward    avg -11.1161   min -22.3297   max +1.2723
+  paths     steer +0.3787  speed -0.4872  terrain -11.3004  achievement +0.0061
+  speed     avg 27.9 mph
+  terrain   road 31% | mixed 7% | offroad 61%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=805903
+
+[05:34]  frames 28501–28800
+  reward    avg -13.6639   min -22.7635   max +0.0756
+  paths     steer +0.0875  speed -0.9131  terrain -13.0658  achievement +0.0010
+  speed     avg 8.2 mph
+  terrain   road 24% | mixed 6% | offroad 69%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=806203
+  stuck     3 event(s) this interval
+
+[05:34]  frames 28801–28811
+  reward    avg -20.2013   min -20.2317   max -20.1256
+  paths     steer +0.4000  speed -0.8586  terrain -20.1208  achievement +0.0065
+  speed     avg 19.9 mph
+  terrain   offroad 100%
+  explore   ε=0.0500  σ=0.0400
+  model     fitted  updates=806213
+
+
+SESSION END  total_frames=28811  updates=806213  elapsed=00:05:34

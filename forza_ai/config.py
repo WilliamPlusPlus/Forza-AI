@@ -28,9 +28,17 @@ class DriveConfig:
 
 
 @dataclass(frozen=True)
+class LearningConfig:
+    reward_profile: str | None = None
+    vision_profile: str | None = None
+    vision_enabled: bool | None = None
+
+
+@dataclass(frozen=True)
 class AppConfig:
     telemetry: TelemetryConfig
     drive: DriveConfig
+    learning: LearningConfig
 
 
 def load_config(path: str | Path) -> AppConfig:
@@ -38,4 +46,5 @@ def load_config(path: str | Path) -> AppConfig:
     return AppConfig(
         telemetry=TelemetryConfig(**data.get("telemetry", {})),
         drive=DriveConfig(**data.get("drive", {})),
+        learning=LearningConfig(**data.get("learning", {})),
     )
