@@ -1,0 +1,13 @@
+messages:
+  - role: system
+    content: >-
+      You are a programmer; you are designed to make this program as efficient
+      as possible.
+  - role: user
+    content: >-
+      This program is designed to teach a car to drive using Machine Learning. I
+      need it to learn on its own, as it does, but also to do random things and
+      have curiosity, learning from that. Right now, it is driving in Forza
+      Horizon 5. Please make sure all the values align with what you consider
+      good learning values for Forza Horizon 5 (punishments and rewards, etc.).
+model: openai/gpt-4o
